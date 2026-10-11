@@ -18,6 +18,31 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r scripts/requirements.txt
 
+      - name: Diagnostico DNS/conectividad Supabase
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        run: |
+          host=$(python3 -c "import os,urllib.parse as u; print(u.urlparse(os.environ['SUPABASE_URL']).hostname)")
+          echo "::notice::Host extraido de SUPABASE_URL: '$host'"
+          echo "::notice::Longitud de SUPABASE_URL (raw): ${#SUPABASE_URL}"
+          echo "---- resolv.conf ----"
+          cat /etc/resolv.conf || true
+          echo "---- getent hosts ----"
+          if getent hosts "$host"; then
+            echo "::notice::DNS resuelto correctamente con getent"
+          else
+            echo "::error::getent NO pudo resolver '$host'"
+          fi
+          echo "---- nslookup (si existe) ----"
+          command -v nslookup >/dev/null 2>&1 && nslookup "$host" || echo "nslookup no disponible"
+          echo "---- curl -v HEAD ----"
+          if curl -sS -o /dev/null -w "HTTP_STATUS:%{http_code}\n" --max-time 15 "https://$host/rest/v1/"; then
+            echo "::notice::curl pudo conectar a https://$host"
+          else
+            echo "::error::curl NO pudo conectar a https://$host (exit $?)"
+          fi
+
       - name: Sincronizar intervals.icu (actividades + bienestar + peso) -> Supabase
         env:
           INTERVALS_ATHLETE_ID: ${{ secrets.INTERVALS_ATHLETE_ID }}

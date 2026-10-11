@@ -152,4 +152,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        # Emitted as a GitHub Actions "error" workflow command so it shows
+        # up as a check-run annotation (readable via the REST API), not
+        # just in the raw log stream.
+        print(f"::error::sync_intervals.py fallo: {type(exc).__name__}: {exc}", file=sys.stderr)
+        raise
