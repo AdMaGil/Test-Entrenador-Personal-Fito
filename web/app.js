@@ -30,6 +30,33 @@ function isoDate(d) {
 
 const DOW_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
+// Traducciones conocidas de los tipos que mandan Garmin/intervals.icu.
+// Si aparece un tipo que no está aquí, se muestra tal cual viene (nunca se oculta).
+const ACTIVITY_LABELS = {
+  HIIT: "HIIT",
+  Run: "Carrera",
+  Running: "Carrera",
+  VirtualRun: "Carrera (cinta)",
+  Ride: "Bici",
+  VirtualRide: "Bici (virtual)",
+  MountainBikeRide: "Bici de montaña",
+  GravelRide: "Bici de gravel",
+  EBikeRide: "Bici eléctrica",
+  EMountainBikeRide: "Bici eléctrica de montaña",
+  Walk: "Caminata",
+  Hike: "Senderismo",
+  Swim: "Natación",
+  WeightTraining: "Pesas",
+  Workout: "Entreno",
+};
+
+let activeTypeFilter = null; // null = todas
+
+function activityLabel(type) {
+  if (!type) return "Entreno";
+  return ACTIVITY_LABELS[type] || type;
+}
+
 function loadClass(load) {
   if (load == null) return "load-low";
   if (load < 35) return "load-low";
@@ -37,7 +64,52 @@ function loadClass(load) {
   return "load-high";
 }
 
+function renderTypeFilters(training) {
+  const bar = document.getElementById("typeFilters");
+  if (!bar) return;
+  const counts = {};
+  training.forEach((t) => {
+    const key = t.activity_type || "Otro";
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  const types = Object.keys(counts).sort((a, b) => activityLabel(a).localeCompare(activityLabel(b), "es"));
+
+  if (activeTypeFilter && !types.includes(activeTypeFilter)) activeTypeFilter = null;
+
+  bar.innerHTML = "";
+  if (!types.length) return;
+
+  const allChip = document.createElement("button");
+  allChip.className = "type-chip" + (activeTypeFilter === null ? " active" : "");
+  allChip.textContent = `Todas (${training.length})`;
+  allChip.addEventListener("click", () => { activeTypeFilter = null; renderCurrentView(); });
+  bar.appendChild(allChip);
+
+  types.forEach((type) => {
+    const chip = document.createElement("button");
+    chip.className = "type-chip" + (activeTypeFilter === type ? " active" : "");
+    chip.textContent = `${activityLabel(type)} (${counts[type]})`;
+    chip.addEventListener("click", () => {
+      activeTypeFilter = activeTypeFilter === type ? null : type;
+      renderCurrentView();
+    });
+    bar.appendChild(chip);
+  });
+}
+
+function dayDetailHtml(t) {
+  const parts = [];
+  if (t.distance_km) parts.push(`${t.distance_km} km`);
+  if (t.max_hr) parts.push(`FC máx ${Math.round(t.max_hr)} ppm`);
+  if (t.calories) parts.push(`${Math.round(t.calories)} kcal`);
+  if (t.sleep_score != null) parts.push(`Sueño ${Math.round(t.sleep_score)}`);
+  if (!parts.length) return "";
+  return `<div class="day-detail">${parts.join(" · ")}</div>`;
+}
+
 function renderCalendar(training, body) {
+  renderTypeFilters(training);
+
   const container = document.getElementById("calendarList");
   container.innerHTML = "";
 
@@ -74,16 +146,20 @@ function renderCalendar(training, body) {
       const d = new Date(weekStart);
       d.setDate(d.getDate() + i);
       const iso = isoDate(d);
-      const t = trainingByDate[iso];
+      const rawT = trainingByDate[iso];
+      const matches = rawT && (!activeTypeFilter || rawT.activity_type === activeTypeFilter);
+      const t = matches ? rawT : null;
+      const otherType = rawT && !matches ? rawT : null; // hubo entreno pero no es del tipo filtrado
       const b = bodyByDate[iso];
       if (t) {
         sessions++;
         totalMin += t.duration_min || 0;
         if (t.training_load != null) { loadSum += t.training_load; loadCount++; }
       }
-      days.push({ date: d, iso, t, b });
+      days.push({ date: d, iso, t, otherType, b });
     }
-    if (!days.some((x) => x.t || x.b)) return; // semana totalmente vacía fuera del rango real
+    if (!days.some((x) => x.t || x.otherType || x.b)) return; // semana totalmente vacía fuera del rango real
+    if (activeTypeFilter && sessions === 0) return; // con filtro activo, oculta semanas sin ese tipo
 
     const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
     const rangeLabel = `${fmtDate(isoDate(weekStart))} – ${fmtDate(isoDate(weekEnd))}`;
@@ -98,16 +174,16 @@ function renderCalendar(training, body) {
       </div>
     `;
 
-    days.forEach(({ date, iso, t, b }) => {
+    days.forEach(({ date, iso, t, otherType, b }) => {
       const row = document.createElement("div");
-      row.className = "day-row" + (iso === todayStr ? " today" : "");
+      row.className = "day-row" + (iso === todayStr ? " today" : "") + (t ? " has-detail" : "");
 
       const dateHtml = `<div class="day-date"><span class="dow">${DOW_LABELS[date.getDay() === 0 ? 6 : date.getDay() - 1]}</span><span class="num">${date.getDate()}</span></div>`;
 
       let bodyHtml;
       if (t) {
         const cls = loadClass(t.training_load);
-        const label = t.activity_type || "Entreno";
+        const label = activityLabel(t.activity_type);
         const dur = t.duration_min ? `${Math.round(t.duration_min)}m` : "";
         const meta = [];
         if (t.avg_hr) meta.push(`<b>${Math.round(t.avg_hr)}</b> ppm`);
@@ -117,6 +193,8 @@ function renderCalendar(training, body) {
           <span class="load-pill ${cls}">${label}${dur ? " · " + dur : ""}${t.training_load != null ? " · " + Math.round(t.training_load) : ""}</span>
           <span class="day-meta">${meta.join(" · ")}</span>
         `;
+      } else if (otherType) {
+        bodyHtml = `<span class="rest-label">${activityLabel(otherType.activity_type)} (otro tipo)</span>`;
       } else {
         bodyHtml = `<span class="rest-label">Descanso</span>`;
       }
@@ -125,6 +203,20 @@ function renderCalendar(training, body) {
       }
 
       row.innerHTML = dateHtml + `<div class="day-body">${bodyHtml}</div>`;
+
+      if (t) {
+        const detail = document.createElement("div");
+        detail.className = "day-detail-wrap";
+        detail.innerHTML = dayDetailHtml(t);
+        detail.style.display = "none";
+        row.appendChild(detail);
+        row.style.cursor = "pointer";
+        row.addEventListener("click", () => {
+          if (!detail.innerHTML) return;
+          detail.style.display = detail.style.display === "none" ? "block" : "none";
+        });
+      }
+
       card.appendChild(row);
     });
 
@@ -132,7 +224,7 @@ function renderCalendar(training, body) {
   });
 
   if (!container.children.length) {
-    container.innerHTML = '<div class="week-empty">Sin datos en este rango todavía.</div>';
+    container.innerHTML = '<div class="week-empty">Sin sesiones de este tipo en el rango seleccionado.</div>';
   }
 }
 

@@ -45,13 +45,21 @@
   #setup code { background: #0f172a; padding: 2px 6px; border-radius: 4px; color: var(--accent); }
 
   /* Calendario en formato agenda */
+  .type-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .type-chip { background: var(--card); border: 1px solid var(--line); color: var(--muted);
+    padding: 6px 12px; border-radius: 999px; font-size: 0.78rem; cursor: pointer; }
+  .type-chip.active { background: var(--accent); color: #0f172a; border-color: var(--accent); font-weight: 600; }
   .week-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
   .week-head { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
   .week-range { font-weight: 700; font-size: 0.92rem; }
   .week-totals { color: var(--muted); font-size: 0.78rem; }
-  .day-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid #27354a; }
+  .day-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid #27354a; flex-wrap: wrap; }
   .day-row:last-child { border-bottom: none; }
   .day-row.today { background: rgba(56,189,248,0.08); box-shadow: inset 3px 0 0 var(--accent); }
+  .day-row.has-detail:active { background: rgba(255,255,255,0.03); }
+  .day-detail-wrap { flex-basis: 100%; }
+  .day-detail { margin-top: 4px; margin-left: 64px; font-size: 0.76rem; color: var(--muted);
+    border-top: 1px dashed var(--line); padding-top: 6px; }
   .day-date { width: 54px; flex-shrink: 0; line-height: 1.15; }
   .day-date .dow { display: block; font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
   .day-date .num { display: block; font-size: 1rem; font-weight: 700; }
@@ -112,6 +120,7 @@
 </div>
 
 <div id="calendarView" style="display:none">
+  <div class="type-filters" id="typeFilters"></div>
   <div id="calendarList"></div>
 </div>
 
