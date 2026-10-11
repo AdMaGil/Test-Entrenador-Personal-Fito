@@ -3,7 +3,12 @@ name: Sync training + body composition data
 on:
   schedule:
     - cron: "0 6 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: "Dias hacia atras a sincronizar (por defecto 30; usa un numero mayor para una recarga puntual del historico)"
+        required: false
+        default: "30"
 
 jobs:
   sync:
@@ -53,4 +58,5 @@ jobs:
           INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || '30' }}
         run: python scripts/sync_intervals.py
