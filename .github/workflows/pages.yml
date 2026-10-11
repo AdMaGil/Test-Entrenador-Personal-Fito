@@ -35,6 +35,9 @@ jobs:
           };
           EOF
 
+      - name: Forzar actualizacion del service worker en cada deploy
+        run: sed -i "s/__CACHE_VERSION__/${{ github.sha }}/" web/sw.js
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web

@@ -1,4 +1,4 @@
-const CACHE = "entrenador-v1";
+const CACHE = "entrenador-__CACHE_VERSION__";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.json"];
 
 self.addEventListener("install", (event) => {
