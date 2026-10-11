@@ -18,6 +18,14 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r scripts/requirements.txt
 
+      - name: Forzar DNS publico (Cloudflare/Google)
+        run: |
+          echo "---- resolv.conf ANTES ----"
+          cat /etc/resolv.conf || true
+          printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' | sudo tee /etc/resolv.conf
+          echo "---- resolv.conf DESPUES ----"
+          cat /etc/resolv.conf
+
       - name: Diagnostico DNS/conectividad Supabase
         continue-on-error: true
         env:
@@ -26,17 +34,13 @@ jobs:
           host=$(python3 -c "import os,urllib.parse as u; print(u.urlparse(os.environ['SUPABASE_URL']).hostname)")
           echo "::notice::Host extraido de SUPABASE_URL: '$host'"
           echo "::notice::Longitud de SUPABASE_URL (raw): ${#SUPABASE_URL}"
-          echo "---- resolv.conf ----"
-          cat /etc/resolv.conf || true
-          echo "---- getent hosts ----"
+          echo "---- getent hosts (tras forzar DNS publico) ----"
           if getent hosts "$host"; then
             echo "::notice::DNS resuelto correctamente con getent"
           else
-            echo "::error::getent NO pudo resolver '$host'"
+            echo "::error::getent NO pudo resolver '$host' incluso con DNS publico"
           fi
-          echo "---- nslookup (si existe) ----"
-          command -v nslookup >/dev/null 2>&1 && nslookup "$host" || echo "nslookup no disponible"
-          echo "---- curl -v HEAD ----"
+          echo "---- curl ----"
           if curl -sS -o /dev/null -w "HTTP_STATUS:%{http_code}\n" --max-time 15 "https://$host/rest/v1/"; then
             echo "::notice::curl pudo conectar a https://$host"
           else
