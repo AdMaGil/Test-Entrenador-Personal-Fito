@@ -14,6 +14,7 @@ Variables de entorno requeridas (GitHub Secrets):
 
 import os
 import sys
+import time
 import requests
 from datetime import date, timedelta
 
@@ -24,13 +25,41 @@ SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
 LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "30"))
 
+MAX_RETRIES = 4
+RETRY_BACKOFF_BASE = 5  # seconds: 5, 10, 20, 40...
+
+
+def _request_with_retry(method, url, **kwargs):
+    """Wraps requests.request to retry on transient network errors
+    (DNS resolution failures, connection resets, timeouts), which happen
+    occasionally on GitHub Actions runners and are not caused by bad
+    config. Raises the last exception if all retries are exhausted."""
+    last_exc = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            return requests.request(method, url, **kwargs)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+            last_exc = exc
+            if attempt == MAX_RETRIES:
+                break
+            wait = RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
+            print(
+                f"[retry] intento {attempt}/{MAX_RETRIES} fallido para {url}: {exc}. "
+                f"Reintentando en {wait}s...",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+    raise last_exc
+
 
 def fetch_activities():
     oldest = (date.today() - timedelta(days=LOOKBACK_DAYS)).isoformat()
     newest = date.today().isoformat()
     url = f"https://intervals.icu/api/v1/athlete/{INTERVALS_ATHLETE_ID}/activities"
     params = {"oldest": oldest, "newest": newest}
-    resp = requests.get(url, params=params, auth=("API_KEY", INTERVALS_API_KEY), timeout=30)
+    resp = _request_with_retry(
+        "GET", url, params=params, auth=("API_KEY", INTERVALS_API_KEY), timeout=30
+    )
     resp.raise_for_status()
     return resp.json()
 
@@ -40,7 +69,9 @@ def fetch_wellness():
     newest = date.today().isoformat()
     url = f"https://intervals.icu/api/v1/athlete/{INTERVALS_ATHLETE_ID}/wellness"
     params = {"oldest": oldest, "newest": newest}
-    resp = requests.get(url, params=params, auth=("API_KEY", INTERVALS_API_KEY), timeout=30)
+    resp = _request_with_retry(
+        "GET", url, params=params, auth=("API_KEY", INTERVALS_API_KEY), timeout=30
+    )
     resp.raise_for_status()
     return resp.json()
 
@@ -56,7 +87,9 @@ def upsert_supabase(table, rows, conflict_col):
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates,return=minimal",
     }
-    resp = requests.post(f"{url}?on_conflict={conflict_col}", headers=headers, json=rows, timeout=30)
+    resp = _request_with_retry(
+        "POST", f"{url}?on_conflict={conflict_col}", headers=headers, json=rows, timeout=30
+    )
     if not resp.ok:
         print(f"[{table}] ERROR {resp.status_code}: {resp.text}", file=sys.stderr)
         resp.raise_for_status()
