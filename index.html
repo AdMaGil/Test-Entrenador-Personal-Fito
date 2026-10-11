@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Mi Entrenador</title>
+<meta name="description" content="Panel personal de entrenamiento y composición corporal" />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0f172a" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8;
+    --accent: #38bdf8; --good: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 16px; padding-bottom: 48px; }
+  header { margin-bottom: 20px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; }
+  .tabs { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+  .tab { background: var(--card); border: 1px solid #334155; color: var(--text);
+    padding: 8px 14px; border-radius: 20px; font-size: 0.85rem; cursor: pointer; }
+  .tab.active { background: var(--accent); color: #0f172a; border-color: var(--accent); font-weight: 600; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat-tile { background: var(--card); border-radius: 12px; padding: 14px; border: 1px solid #334155; }
+  .stat-tile .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .stat-tile .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+  .chart-card { background: var(--card); border-radius: 12px; padding: 16px; border: 1px solid #334155; margin-bottom: 16px; }
+  .chart-card h2 { font-size: 1rem; margin: 0 0 12px; color: var(--text); }
+  .chart-wrap { position: relative; height: 220px; }
+  .error { color: #f87171; text-align: center; padding: 40px 16px; font-size: 0.9rem; }
+  footer { text-align: center; color: var(--muted); font-size: 0.75rem; margin-top: 24px; }
+  #setup { background: var(--card); border: 1px solid #334155; border-radius: 12px; padding: 16px; margin-bottom: 16px; font-size: 0.85rem; color: var(--muted); display:none; }
+  #setup code { background: #0f172a; padding: 2px 6px; border-radius: 4px; color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏃 Mi Entrenador</h1>
+  <div class="subtitle" id="subtitle">Cargando datos…</div>
+</header>
+
+<div id="setup">
+  Falta configurar la conexión a Supabase. Crea <code>web/config.js</code> a partir de
+  <code>config.example.js</code> con la URL y la clave anónima de tu proyecto.
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-range="30">30 días</button>
+  <button class="tab" data-range="90">90 días</button>
+  <button class="tab" data-range="365">1 año</button>
+  <button class="tab" data-range="9999">Todo</button>
+</div>
+
+<div class="stat-grid" id="stats"></div>
+
+<div class="chart-card">
+  <h2>Carga de entrenamiento</h2>
+  <div class="chart-wrap"><canvas id="chartLoad"></canvas></div>
+</div>
+
+<div class="chart-card">
+  <h2>HRV y Body Battery</h2>
+  <div class="chart-wrap"><canvas id="chartRecovery"></canvas></div>
+</div>
+
+<div class="chart-card">
+  <h2>Peso y % grasa corporal</h2>
+  <div class="chart-wrap"><canvas id="chartBody"></canvas></div>
+</div>
+
+<footer>Datos: Garmin → intervals.icu · Báscula Feelfit → Health Sync → intervals.icu · Sincronizado a diario</footer>
+
+<script src="config.js" onerror="document.getElementById('setup').style.display='block'"></script>
+<script src="app.js"></script>
+</body>
+</html>
