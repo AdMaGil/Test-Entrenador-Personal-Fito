@@ -13,6 +13,8 @@
   :root {
     --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8;
     --accent: #38bdf8; --good: #4ade80;
+    --load-low: #4ade80; --load-mid: #fbbf24; --load-high: #f87171;
+    --line: #334155;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
@@ -22,20 +24,49 @@
   h1 { font-size: 1.4rem; margin: 0 0 4px; }
   .subtitle { color: var(--muted); font-size: 0.9rem; }
   .tabs { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
-  .tab { background: var(--card); border: 1px solid #334155; color: var(--text);
+  .tab { background: var(--card); border: 1px solid var(--line); color: var(--text);
     padding: 8px 14px; border-radius: 20px; font-size: 0.85rem; cursor: pointer; }
   .tab.active { background: var(--accent); color: #0f172a; border-color: var(--accent); font-weight: 600; }
+  .view-tabs { display: flex; gap: 6px; margin-bottom: 4px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 4px; }
+  .view-tab { flex: 1; background: transparent; border: none; color: var(--muted); padding: 9px 10px;
+    border-radius: 9px; font-size: 0.88rem; font-weight: 600; cursor: pointer; }
+  .view-tab.active { background: var(--bg); color: var(--text); }
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 20px; }
-  .stat-tile { background: var(--card); border-radius: 12px; padding: 14px; border: 1px solid #334155; }
+  .stat-tile { background: var(--card); border-radius: 12px; padding: 14px; border: 1px solid var(--line); }
   .stat-tile .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
   .stat-tile .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
-  .chart-card { background: var(--card); border-radius: 12px; padding: 16px; border: 1px solid #334155; margin-bottom: 16px; }
+  .chart-card { background: var(--card); border-radius: 12px; padding: 16px; border: 1px solid var(--line); margin-bottom: 16px; }
   .chart-card h2 { font-size: 1rem; margin: 0 0 12px; color: var(--text); }
   .chart-wrap { position: relative; height: 220px; }
   .error { color: #f87171; text-align: center; padding: 40px 16px; font-size: 0.9rem; }
   footer { text-align: center; color: var(--muted); font-size: 0.75rem; margin-top: 24px; }
-  #setup { background: var(--card); border: 1px solid #334155; border-radius: 12px; padding: 16px; margin-bottom: 16px; font-size: 0.85rem; color: var(--muted); display:none; }
+  #setup { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; font-size: 0.85rem; color: var(--muted); display:none; }
   #setup code { background: #0f172a; padding: 2px 6px; border-radius: 4px; color: var(--accent); }
+
+  /* Calendario en formato agenda */
+  .week-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+  .week-head { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .week-range { font-weight: 700; font-size: 0.92rem; }
+  .week-totals { color: var(--muted); font-size: 0.78rem; }
+  .day-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid #27354a; }
+  .day-row:last-child { border-bottom: none; }
+  .day-row.today { background: rgba(56,189,248,0.08); box-shadow: inset 3px 0 0 var(--accent); }
+  .day-date { width: 54px; flex-shrink: 0; line-height: 1.15; }
+  .day-date .dow { display: block; font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
+  .day-date .num { display: block; font-size: 1rem; font-weight: 700; }
+  .day-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rest-label { color: var(--muted); font-size: 0.82rem; }
+  .load-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+    font-size: 0.78rem; font-weight: 600; color: #0f172a; white-space: nowrap; }
+  .load-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.001; }
+  .load-low { background: var(--load-low); }
+  .load-mid { background: var(--load-mid); }
+  .load-high { background: var(--load-high); }
+  .day-meta { display: flex; gap: 10px; font-size: 0.76rem; color: var(--muted); flex-wrap: wrap; }
+  .day-meta b { color: var(--text); font-weight: 600; }
+  .weight-chip { font-size: 0.76rem; color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .week-empty { text-align: center; color: var(--muted); font-size: 0.85rem; padding: 24px 16px; }
 </style>
 </head>
 <body>
@@ -49,6 +80,11 @@
   <code>config.example.js</code> con la URL y la clave anónima de tu proyecto.
 </div>
 
+<div class="view-tabs">
+  <button class="view-tab active" data-view="summary">Resumen</button>
+  <button class="view-tab" data-view="calendar">Calendario</button>
+</div>
+
 <div class="tabs">
   <button class="tab active" data-range="30">30 días</button>
   <button class="tab" data-range="90">90 días</button>
@@ -56,21 +92,27 @@
   <button class="tab" data-range="9999">Todo</button>
 </div>
 
-<div class="stat-grid" id="stats"></div>
+<div id="summaryView">
+  <div class="stat-grid" id="stats"></div>
 
-<div class="chart-card">
-  <h2>Carga de entrenamiento</h2>
-  <div class="chart-wrap"><canvas id="chartLoad"></canvas></div>
+  <div class="chart-card">
+    <h2>Carga de entrenamiento</h2>
+    <div class="chart-wrap"><canvas id="chartLoad"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <h2>HRV y Body Battery</h2>
+    <div class="chart-wrap"><canvas id="chartRecovery"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <h2>Peso y % grasa corporal</h2>
+    <div class="chart-wrap"><canvas id="chartBody"></canvas></div>
+  </div>
 </div>
 
-<div class="chart-card">
-  <h2>HRV y Body Battery</h2>
-  <div class="chart-wrap"><canvas id="chartRecovery"></canvas></div>
-</div>
-
-<div class="chart-card">
-  <h2>Peso y % grasa corporal</h2>
-  <div class="chart-wrap"><canvas id="chartBody"></canvas></div>
+<div id="calendarView" style="display:none">
+  <div id="calendarList"></div>
 </div>
 
 <footer>Datos: Garmin → intervals.icu · Báscula Feelfit → Health Sync → intervals.icu · Sincronizado a diario</footer>

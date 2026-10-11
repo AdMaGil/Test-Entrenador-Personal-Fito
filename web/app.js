@@ -1,9 +1,139 @@
 const cfg = window.SUPABASE_CONFIG;
 let currentRange = 30;
+let currentView = "summary";
 let charts = {};
+let lastTraining = [];
+let lastBody = [];
 
 function fmtDate(d) {
   return new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
+}
+
+function parseLocalDate(iso) {
+  // "YYYY-MM-DD" -> Date a medianoche local (evita el desfase de interpretarlo como UTC)
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function mondayOf(date) {
+  const d = new Date(date);
+  const dow = d.getDay(); // 0 = domingo
+  const diff = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const DOW_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+function loadClass(load) {
+  if (load == null) return "load-low";
+  if (load < 35) return "load-low";
+  if (load < 50) return "load-mid";
+  return "load-high";
+}
+
+function renderCalendar(training, body) {
+  const container = document.getElementById("calendarList");
+  container.innerHTML = "";
+
+  if (!training.length && !body.length) {
+    container.innerHTML = '<div class="week-empty">Sin datos en este rango todavía.</div>';
+    return;
+  }
+
+  const trainingByDate = {};
+  training.forEach((r) => {
+    // Si hay varias sesiones el mismo día, nos quedamos con la de mayor carga
+    const existing = trainingByDate[r.date];
+    if (!existing || (r.training_load || 0) > (existing.training_load || 0)) trainingByDate[r.date] = r;
+  });
+  const bodyByDate = {};
+  body.forEach((r) => { bodyByDate[r.date] = r; });
+
+  const allDates = Array.from(new Set([...training.map((r) => r.date), ...body.map((r) => r.date)])).sort();
+  const firstMonday = mondayOf(parseLocalDate(allDates[0]));
+  const todayStr = isoDate(new Date());
+
+  // Semanas en orden descendente (la más reciente primero)
+  const weeks = [];
+  let cursor = mondayOf(parseLocalDate(allDates[allDates.length - 1]));
+  while (cursor >= firstMonday) {
+    weeks.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() - 7);
+  }
+
+  weeks.forEach((weekStart) => {
+    const days = [];
+    let sessions = 0, totalMin = 0, loadSum = 0, loadCount = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      const iso = isoDate(d);
+      const t = trainingByDate[iso];
+      const b = bodyByDate[iso];
+      if (t) {
+        sessions++;
+        totalMin += t.duration_min || 0;
+        if (t.training_load != null) { loadSum += t.training_load; loadCount++; }
+      }
+      days.push({ date: d, iso, t, b });
+    }
+    if (!days.some((x) => x.t || x.b)) return; // semana totalmente vacía fuera del rango real
+
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
+    const rangeLabel = `${fmtDate(isoDate(weekStart))} – ${fmtDate(isoDate(weekEnd))}`;
+    const avgLoad = loadCount ? Math.round(loadSum / loadCount) : null;
+
+    const card = document.createElement("div");
+    card.className = "week-card";
+    card.innerHTML = `
+      <div class="week-head">
+        <div class="week-range">${rangeLabel}</div>
+        <div class="week-totals">${sessions} sesion${sessions === 1 ? "" : "es"} · ${(totalMin / 60).toFixed(1)}h${avgLoad != null ? ` · carga media ${avgLoad}` : ""}</div>
+      </div>
+    `;
+
+    days.forEach(({ date, iso, t, b }) => {
+      const row = document.createElement("div");
+      row.className = "day-row" + (iso === todayStr ? " today" : "");
+
+      const dateHtml = `<div class="day-date"><span class="dow">${DOW_LABELS[date.getDay() === 0 ? 6 : date.getDay() - 1]}</span><span class="num">${date.getDate()}</span></div>`;
+
+      let bodyHtml;
+      if (t) {
+        const cls = loadClass(t.training_load);
+        const label = t.activity_type || "Entreno";
+        const dur = t.duration_min ? `${Math.round(t.duration_min)}m` : "";
+        const meta = [];
+        if (t.avg_hr) meta.push(`<b>${Math.round(t.avg_hr)}</b> ppm`);
+        if (t.hrv) meta.push(`HRV <b>${Math.round(t.hrv)}</b>`);
+        if (t.body_battery != null) meta.push(`BB <b>${Math.round(t.body_battery)}</b>`);
+        bodyHtml = `
+          <span class="load-pill ${cls}">${label}${dur ? " · " + dur : ""}${t.training_load != null ? " · " + Math.round(t.training_load) : ""}</span>
+          <span class="day-meta">${meta.join(" · ")}</span>
+        `;
+      } else {
+        bodyHtml = `<span class="rest-label">Descanso</span>`;
+      }
+      if (b && b.weight_kg != null) {
+        bodyHtml += `<span class="weight-chip">⚖ ${b.weight_kg}kg${b.fat_pct != null ? ` · ${b.fat_pct}%` : ""}</span>`;
+      }
+
+      row.innerHTML = dateHtml + `<div class="day-body">${bodyHtml}</div>`;
+      card.appendChild(row);
+    });
+
+    container.appendChild(card);
+  });
+
+  if (!container.children.length) {
+    container.innerHTML = '<div class="week-empty">Sin datos en este rango todavía.</div>';
+  }
 }
 
 async function fetchTable(table, days) {
@@ -87,15 +217,25 @@ function renderCharts(training, body) {
   ]);
 }
 
+function renderCurrentView() {
+  if (currentView === "summary") {
+    renderStats(lastTraining, lastBody);
+    renderCharts(lastTraining, lastBody);
+  } else {
+    renderCalendar(lastTraining, lastBody);
+  }
+}
+
 async function load(days) {
   currentRange = days;
   const subtitle = document.getElementById("subtitle");
   subtitle.textContent = "Cargando datos…";
   try {
     const [training, body] = await Promise.all([fetchTable("training_metrics", days), fetchTable("body_composition", days)]);
+    lastTraining = training;
+    lastBody = body;
     subtitle.textContent = `Actualizado · ${training.length} sesiones, ${body.length} pesajes`;
-    renderStats(training, body);
-    renderCharts(training, body);
+    renderCurrentView();
   } catch (err) {
     if (err.message === "no-config") {
       document.getElementById("setup").style.display = "block";
@@ -112,6 +252,17 @@ document.querySelectorAll(".tab").forEach((btn) => {
     document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     load(Number(btn.dataset.range));
+  });
+});
+
+document.querySelectorAll(".view-tab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".view-tab").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentView = btn.dataset.view;
+    document.getElementById("summaryView").style.display = currentView === "summary" ? "" : "none";
+    document.getElementById("calendarView").style.display = currentView === "calendar" ? "" : "none";
+    renderCurrentView();
   });
 });
 
