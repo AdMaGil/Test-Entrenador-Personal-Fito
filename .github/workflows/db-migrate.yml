@@ -1,0 +1,31 @@
+name: Adolfo Training · aplicar migraciones (manual)
+
+# Solo se ejecuta a mano. Requiere el secreto SUPABASE_DB_URL con la cadena
+# de conexión del "Session pooler" de Supabase (IPv4; los runners de GitHub
+# no tienen IPv6 para la conexión directa). Las migraciones son idempotentes
+# y no destructivas: se pueden volver a aplicar sin perder datos.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Escribe "aplicar" para confirmar'
+        required: true
+
+jobs:
+  migrate:
+    if: ${{ github.event.inputs.confirmar == 'aplicar' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar cliente de PostgreSQL
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Aplicar migraciones en orden
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Falta el secreto SUPABASE_DB_URL"; exit 1; fi
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            echo "Aplicando $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+          echo "::notice::Migraciones aplicadas"

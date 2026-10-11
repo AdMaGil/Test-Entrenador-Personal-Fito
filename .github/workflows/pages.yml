@@ -1,11 +1,8 @@
-name: Deploy web to GitHub Pages
+name: Deploy web to GitHub Pages (panel heredado)
 
+# Panel original. Pasa a ser manual para que no sobrescriba la nueva app
+# Adolfo Training cuando esta se publique con app-deploy.yml.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "web/**"
-      - ".github/workflows/pages.yml"
   workflow_dispatch: {}
 
 permissions:

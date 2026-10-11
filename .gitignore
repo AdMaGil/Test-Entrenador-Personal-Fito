@@ -1,0 +1,7 @@
+node_modules/
+dist/
+web/config.js
+app/.env.local
+__pycache__/
+*.pyc
+.env

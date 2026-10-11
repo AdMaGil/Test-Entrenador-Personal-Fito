@@ -1,11 +1,6 @@
 name: Inspeccionar esquema Intervals.icu (solo campos)
 
 on:
-  push:
-    branches: [feature/adolfo-training]
-    paths:
-      - "scripts/inspect_intervals.py"
-      - ".github/workflows/inspect-intervals.yml"
   workflow_dispatch: {}
 
 jobs:

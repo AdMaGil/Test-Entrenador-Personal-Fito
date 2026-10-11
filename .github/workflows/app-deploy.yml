@@ -1,0 +1,50 @@
+name: Adolfo Training · publicar en GitHub Pages (manual)
+
+# Publicar solo cuando esté autorizado: sustituye el panel anterior en
+# https://<usuario>.github.io/<repo>/. Usa las claves públicas de Supabase
+# (URL y clave anónima); los datos los protegen el inicio de sesión y RLS.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Escribe "publicar" para confirmar'
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ github.event.inputs.confirmar == 'publicar' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Build
+        working-directory: app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_COACH_AI_ENABLED: ${{ vars.COACH_AI_ENABLED || 'false' }}
+        run: |
+          npm ci
+          npx vitest run
+          npx vite build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
