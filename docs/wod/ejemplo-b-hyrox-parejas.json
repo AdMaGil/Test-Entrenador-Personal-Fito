@@ -1,0 +1,82 @@
+{
+  "formato": "adolfo-wod",
+  "version": 1,
+  "nombre": "HYROX por parejas",
+  "fecha": null,
+  "modalidad": "parejas",
+  "transcripcion": "HYROX PAREJAS\nEMOM 6': A) MAX CAL SKI / B) MAX SIT UPS\nFOR TIME (3'): 30 BOX JUMP OVER / 15 DEVIL PRESS (2 DB)\nREST 2'\nEMOM 6': A) MAX CAL ECHO BIKE / B) MAX PUSH UPS\nFOR TIME (3'): 30 KB HIGH SWING / 15 BURPEES OVER THE PARTNER\nREST 2'\nEMOM 6': A) MAX CAL ROW / B) MAX AIR SQUATS\nFOR TIME (3'): 30 SUMO DEADLIFT HIGH PULL / 15 BURPEES BOX JUMPS / STEP UPS",
+  "calentamiento": null,
+  "bloques": [
+    {
+      "id": "b1", "titulo": "Grupo 1 · EMOM", "tipo": "emom", "duracion_s": 360, "limite_tiempo_s": null, "indicacion_tiempo": null,
+      "rondas": null, "intervalo_s": 60, "rpe": null, "descanso": null,
+      "ejercicios": [
+        { "id": "e1", "nombre": "SkiErg", "participante": "A", "objetivo": { "tipo": "max_calorias", "valor": null, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "MAX CAL" }, "carga": null, "equipamiento": "SkiErg", "alternativas": null, "notas": null },
+        { "id": "e2", "nombre": "Sit-ups", "participante": "B", "objetivo": { "tipo": "max_reps", "valor": null, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "MAX" }, "carga": null, "equipamiento": null, "alternativas": null, "notas": null }
+      ],
+      "notas": null
+    },
+    {
+      "id": "b2", "titulo": "Grupo 1 · For Time", "tipo": "for_time", "duracion_s": null, "limite_tiempo_s": null, "indicacion_tiempo": "3'",
+      "rondas": null, "intervalo_s": null, "rpe": null, "descanso": null,
+      "ejercicios": [
+        { "id": "e3", "nombre": "Box jump over", "participante": null, "objetivo": { "tipo": "reps", "valor": 30, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "30" }, "carga": null, "equipamiento": "cajón", "alternativas": null, "notas": null },
+        { "id": "e4", "nombre": "Devil press", "participante": null, "objetivo": { "tipo": "reps", "valor": 15, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "15" }, "carga": { "texto": "2 DB", "kg": null, "implementos": 2, "modo": "por_implemento" }, "equipamiento": "mancuernas", "alternativas": null, "notas": null }
+      ],
+      "notas": null
+    },
+    {
+      "id": "b3", "titulo": null, "tipo": "descanso", "duracion_s": 120, "limite_tiempo_s": null, "indicacion_tiempo": null,
+      "rondas": null, "intervalo_s": null, "rpe": null, "descanso": null, "ejercicios": [], "notas": null
+    },
+    {
+      "id": "b4", "titulo": "Grupo 2 · EMOM", "tipo": "emom", "duracion_s": 360, "limite_tiempo_s": null, "indicacion_tiempo": null,
+      "rondas": null, "intervalo_s": 60, "rpe": null, "descanso": null,
+      "ejercicios": [
+        { "id": "e5", "nombre": "Echo bike", "participante": "A", "objetivo": { "tipo": "max_calorias", "valor": null, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "MAX CAL" }, "carga": null, "equipamiento": "Echo bike", "alternativas": null, "notas": null },
+        { "id": "e6", "nombre": "Push-ups", "participante": "B", "objetivo": { "tipo": "max_reps", "valor": null, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "MAX" }, "carga": null, "equipamiento": null, "alternativas": null, "notas": null }
+      ],
+      "notas": null
+    },
+    {
+      "id": "b5", "titulo": "Grupo 2 · For Time", "tipo": "for_time", "duracion_s": null, "limite_tiempo_s": null, "indicacion_tiempo": "3'",
+      "rondas": null, "intervalo_s": null, "rpe": null, "descanso": null,
+      "ejercicios": [
+        { "id": "e7", "nombre": "KB high swing", "participante": null, "objetivo": { "tipo": "reps", "valor": 30, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "30" }, "carga": null, "equipamiento": "kettlebell", "alternativas": null, "notas": null },
+        { "id": "e8", "nombre": "Burpees over the partner", "participante": null, "objetivo": { "tipo": "reps", "valor": 15, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "15" }, "carga": null, "equipamiento": null, "alternativas": null, "notas": null }
+      ],
+      "notas": null
+    },
+    {
+      "id": "b6", "titulo": null, "tipo": "descanso", "duracion_s": 120, "limite_tiempo_s": null, "indicacion_tiempo": null,
+      "rondas": null, "intervalo_s": null, "rpe": null, "descanso": null, "ejercicios": [], "notas": null
+    },
+    {
+      "id": "b7", "titulo": "Grupo 3 · EMOM", "tipo": "emom", "duracion_s": 360, "limite_tiempo_s": null, "indicacion_tiempo": null,
+      "rondas": null, "intervalo_s": 60, "rpe": null, "descanso": null,
+      "ejercicios": [
+        { "id": "e9", "nombre": "Remo", "participante": "A", "objetivo": { "tipo": "max_calorias", "valor": null, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "MAX CAL" }, "carga": null, "equipamiento": "remo", "alternativas": null, "notas": null },
+        { "id": "e10", "nombre": "Air squats", "participante": "B", "objetivo": { "tipo": "max_reps", "valor": null, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "MAX" }, "carga": null, "equipamiento": null, "alternativas": null, "notas": null }
+      ],
+      "notas": null
+    },
+    {
+      "id": "b8", "titulo": "Grupo 3 · For Time", "tipo": "for_time", "duracion_s": null, "limite_tiempo_s": null, "indicacion_tiempo": "3'",
+      "rondas": null, "intervalo_s": null, "rpe": null, "descanso": null,
+      "ejercicios": [
+        { "id": "e11", "nombre": "Sumo deadlift high pull", "participante": null, "objetivo": { "tipo": "reps", "valor": 30, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "30" }, "carga": null, "equipamiento": null, "alternativas": null, "notas": null },
+        { "id": "e12", "nombre": "Burpees box jumps", "participante": null, "objetivo": { "tipo": "reps", "valor": 15, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "15" }, "carga": null, "equipamiento": "cajón", "alternativas": ["Burpees step-ups"], "notas": null }
+      ],
+      "notas": null
+    }
+  ],
+  "resumen_enfoque": "Intervalos por parejas que alternan trabajo cardiovascular en máquina con trabajo corporal y bloques cortos de potencia (saltos, devil press, swings, high pull).",
+  "notas": null,
+  "ambiguedades": [
+    "No se indica cómo alternan los compañeros (A y B) dentro de cada EMOM.",
+    "No se indica cómo se reparte el trabajo de los bloques For Time entre los dos.",
+    "No se indican pesos de mancuernas, kettlebell ni del sumo deadlift high pull (ni el implemento de este último).",
+    "La indicación «3'» de cada For Time no aclara si es límite de tiempo u otra cosa.",
+    "«Burpees box jumps / step-ups»: no se indica cuándo corresponde cada variante."
+  ]
+}

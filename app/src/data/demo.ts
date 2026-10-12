@@ -7,6 +7,7 @@ import { makeDisplayVersion } from "../lib/photos";
 import type {
   Activity, Checkin, CoachMessage, CoachPayload, DataBundle, Feedback, Framing, Measurement, ParsedImport,
   PhotoEntry, PhotoFile, PlannedDraft, PlannedSession, Pose, Profile, Sport, StrengthEntry, StrengthSet, Streams, Wellness,
+  Workout, WorkoutDraft,
 } from "../lib/types";
 import { buildSession } from "../lib/coach";
 import type { Repo } from "./repo";
@@ -205,7 +206,7 @@ export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; strea
     bundle: {
       profile, activities: acts, wellness: generateWellness(today, acts), measurements: generateMeasurements(today),
       checkins, planned, feedback: {}, connection: null, syncRuns: [], photoEntries: [], coachMessages: [],
-      strengthSets,
+      strengthSets, workouts: [], wodReady: true,
     },
     streams,
     strengthByActivity,
@@ -227,12 +228,40 @@ export class DemoRepo implements Repo {
   }
 
   async loadAll(): Promise<DataBundle> {
-    return structuredClone({ ...this.bundle });
+    // Las series se derivan del estado actual para que la evolución refleje lo guardado en la demo
+    const dateOf = new Map(this.bundle.activities.map((a) => [a.id, a.local_date]));
+    const strengthSets: StrengthEntry[] = [];
+    for (const [actId, sets] of this.sets) {
+      const date = dateOf.get(actId);
+      if (date) sets.forEach((s, i) => strengthSets.push({ ...s, id: s.id ?? `${actId}-${i}`, date }));
+    }
+    return structuredClone({ ...this.bundle, strengthSets });
   }
   async getStreams(id: string) { return this.streams.get(id) ?? null; }
-  async getStrengthSets(id: string) { return this.sets.get(id) ?? []; }
-  async saveStrengthSets(id: string, sets: StrengthSet[]) { this.sets.set(id, sets); }
+  async getStrengthSets(id: string) { return structuredClone(this.sets.get(id) ?? []); }
+  async saveStrengthSets(id: string, sets: StrengthSet[]) { this.sets.set(id, structuredClone(sets).map((s, i) => ({ ...s, id: s.id ?? nid(`set${i}`) }))); }
   async saveFeedback(fb: Feedback) { this.bundle.feedback[fb.activity_id] = fb; }
+  async saveWorkout(draft: WorkoutDraft, supersede: string[] = []) {
+    const existing = this.bundle.workouts.find((w) => w.client_ref === draft.client_ref);
+    if (existing) return structuredClone(existing);
+    const w: Workout = { ...structuredClone(draft), id: nid("wod"), superseded_at: null, created_at: new Date().toISOString() };
+    this.bundle.workouts.push(w);
+    const now = new Date().toISOString();
+    for (const x of this.bundle.workouts) if (supersede.includes(x.id) && x.id !== w.id && !x.superseded_at) x.superseded_at = now;
+    return structuredClone(w);
+  }
+  async updateWorkout(id: string, patch: Partial<Pick<Workout, "title" | "wod_date" | "modality" | "spec">>) {
+    const w = this.bundle.workouts.find((x) => x.id === id);
+    if (w) Object.assign(w, structuredClone(patch));
+  }
+  async linkWorkout(id: string, link: { activity_id: string | null; planned_session_id: string | null }) {
+    const w = this.bundle.workouts.find((x) => x.id === id);
+    if (w) Object.assign(w, link);
+  }
+  async setWorkoutArchived(id: string, archived: boolean) {
+    const w = this.bundle.workouts.find((x) => x.id === id);
+    if (w) w.superseded_at = archived ? new Date().toISOString() : null;
+  }
   async setCategoryOverride(id: string, category: Sport | null) {
     const a = this.bundle.activities.find((x) => x.id === id);
     if (!a) return;

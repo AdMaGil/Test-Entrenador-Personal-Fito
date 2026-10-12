@@ -1,3 +1,5 @@
+import type { WodSpec } from "./wod";
+
 export type Sport = "hiit" | "emtb" | "mtb" | "run" | "otro";
 export type PlanCategory = Sport | "descanso";
 export type Intensity = "suave" | "moderada" | "alta";
@@ -130,7 +132,32 @@ export interface StrengthSet {
   weight_kg: number | null;
   duration_s: number | null;
   notes: string | null;
+  /** «pendiente» = falta un dato (p. ej. el peso venía como «revisar»). Ausente en filas antiguas = realizado. */
+  status?: "realizado" | "pendiente";
+  /** Enlace opcional con el WOD importado y su bloque/ejercicio. */
+  workout_id?: string | null;
+  block_ref?: string | null;
+  item_ref?: string | null;
+  /** Nombre tal como llegó al importar, si después se corrige la asociación. */
+  exercise_original?: string | null;
 }
+
+/** WOD importado: describe el entrenamiento PREVISTO, no lo realizado. */
+export interface Workout {
+  id: string;
+  client_ref: string;
+  activity_id: string | null;
+  planned_session_id: string | null;
+  title: string | null;
+  wod_date: string | null;
+  modality: "individual" | "parejas" | null;
+  spec: WodSpec;
+  source_text: string | null;
+  superseded_at: string | null;
+  created_at: string;
+}
+
+export type WorkoutDraft = Pick<Workout, "client_ref" | "activity_id" | "planned_session_id" | "title" | "wod_date" | "modality" | "spec" | "source_text">;
 
 /** Una serie de fuerza con la fecha de la sesión a la que pertenece (actividad o sesión planificada). */
 export interface StrengthEntry extends StrengthSet {
@@ -243,6 +270,9 @@ export interface DataBundle {
   photoEntries: PhotoEntry[];
   coachMessages: CoachMessage[];
   strengthSets: StrengthEntry[];
+  workouts: Workout[];
+  /** false si la base de datos aún no tiene la migración de WOD aplicada (la app sigue funcionando sin esa parte). */
+  wodReady: boolean;
 }
 
 export interface ParsedImport {

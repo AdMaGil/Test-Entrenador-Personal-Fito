@@ -11,8 +11,11 @@ import {
 } from "../lib/format";
 import { durationOf, intensityBucket, similarSessions } from "../lib/metrics";
 import { isBike, SPORT_DESCRIPTION, SPORT_LABEL, SPORTS, sourceTypeLabel, sportColor } from "../lib/sports";
-import { parseStrengthPaste } from "../lib/strengthPaste";
-import type { Activity, Feedback, Sport, StrengthSet, Streams } from "../lib/types";
+import type { Activity, Feedback, Sport, StrengthSet, Streams, Workout } from "../lib/types";
+import type { WodSpec } from "../lib/wod";
+import { Modal } from "../components/ui";
+import { PendingFlag, WodEditor, WodSummaryLine, WodView } from "../components/Wod";
+import { WodImportModal } from "../components/WodImport";
 
 const MapView = lazy(() => import("../components/MapView"));
 
@@ -38,13 +41,7 @@ function emptyFeedback(activityId: string): Feedback {
 }
 
 function FeedbackForm({ a, f, setF, hasExisting }: { a: Activity; f: Feedback; setF: (f: Feedback) => void; hasExisting: boolean }) {
-  const [pasteFocus, setPasteFocus] = useState("");
   const num = (v: string) => (v === "" ? null : Number(v));
-  const addPastedFocus = () => {
-    if (!pasteFocus.trim()) return;
-    setF({ ...f, notes: f.notes ? `${f.notes}\n\n${pasteFocus.trim()}` : pasteFocus.trim() });
-    setPasteFocus("");
-  };
   return (
     <Card title="Esfuerzo percibido y sensaciones" action={hasExisting ? <OriginBadge origin="manual" /> : null}>
       <div className="form-grid">
@@ -67,12 +64,6 @@ function FeedbackForm({ a, f, setF, hasExisting }: { a: Activity; f: Feedback; s
           </>
         )}
         <Field label="Notas" full><textarea className="input" value={f.notes ?? ""} onChange={(e) => setF({ ...f, notes: e.target.value || null })} /></Field>
-        <Field label="Pegar resumen de enfoque (Bloque 2 del prompt de Claude)" full hint="Pega aquí el resumen de grupos musculares y estímulo que te devuelve Claude al analizar la foto del WOD.">
-          <textarea className="input" rows={3} value={pasteFocus} onChange={(e) => setPasteFocus(e.target.value)} placeholder={"Grupos musculares: ...\nEstímulo: ...\nDesequilibrio: ..."} />
-        </Field>
-        <div className="row" style={{ marginTop: -8, marginBottom: 4 }}>
-          <button className="btn ghost sm" type="button" onClick={addPastedFocus} disabled={!pasteFocus.trim()}>Añadir a notas</button>
-        </div>
       </div>
       <p className="tiny muted" style={{ marginTop: 12 }}>Se guarda con el botón "Guardar sesión" de arriba.</p>
     </Card>
@@ -80,17 +71,8 @@ function FeedbackForm({ a, f, setF, hasExisting }: { a: Activity; f: Feedback; s
 }
 
 function StrengthLog({ sets, setSets }: { sets: StrengthSet[] | null; setSets: (s: StrengthSet[]) => void }) {
-  const { notify } = useApp();
-  const [pasteSeries, setPasteSeries] = useState("");
   if (!sets) return null;
   const upd = (i: number, patch: Partial<StrengthSet>) => setSets(sets.map((s, j) => (j === i ? { ...s, ...patch } : s)));
-  const addPastedSeries = () => {
-    const parsed = parseStrengthPaste(pasteSeries);
-    if (!parsed.length) { notify("No se ha reconocido ninguna serie en el texto pegado", "error"); return; }
-    setSets([...sets, ...parsed]);
-    setPasteSeries("");
-    notify(`${parsed.length} serie(s) añadidas — revisa los pesos marcados como vacíos y pulsa "Guardar sesión" arriba`);
-  };
   const add = () => {
     const last = sets[sets.length - 1];
     setSets([...sets, { exercise: last?.exercise ?? "", set_number: last ? last.set_number + 1 : 1, reps: last?.reps ?? null, weight_kg: last?.weight_kg ?? null, duration_s: null, notes: null }]);
@@ -106,7 +88,15 @@ function StrengthLog({ sets, setSets }: { sets: StrengthSet[] | null; setSets: (
             <tbody>
               {sets.map((s, i) => (
                 <tr key={i}>
-                  <td><input className="input" value={s.exercise} onChange={(e) => upd(i, { exercise: e.target.value })} placeholder="Sentadilla en rack" /></td>
+                  <td>
+                    <input className="input" value={s.exercise} onChange={(e) => upd(i, { exercise: e.target.value })} placeholder="Sentadilla en rack" />
+                    {s.status === "pendiente" && (
+                      <div className="row" style={{ gap: 6, marginTop: 4 }}>
+                        <PendingFlag>Dato pendiente</PendingFlag>
+                        <button type="button" className="btn ghost sm" onClick={() => upd(i, { status: "realizado" })}>Marcar como completa</button>
+                      </div>
+                    )}
+                  </td>
                   <td className="n"><input className="input" style={{ width: 64 }} type="number" min={1} value={s.set_number} onChange={(e) => upd(i, { set_number: Number(e.target.value) || 1 })} /></td>
                   <td className="n"><input className="input" style={{ width: 70 }} type="number" min={0} value={s.reps ?? ""} onChange={(e) => upd(i, { reps: n(e.target.value) })} /></td>
                   <td className="n"><input className="input" style={{ width: 80 }} type="number" min={0} step={0.5} value={s.weight_kg ?? ""} onChange={(e) => upd(i, { weight_kg: n(e.target.value) })} /></td>
@@ -120,12 +110,6 @@ function StrengthLog({ sets, setSets }: { sets: StrengthSet[] | null; setSets: (
       ) : <p className="small muted">Aún no has registrado ejercicios para esta sesión.</p>}
       <div className="row" style={{ marginTop: 10 }}>
         <button className="btn" onClick={add}><Icon name="plus" />Añadir serie</button>
-      </div>
-      <Field label="Pegar series desde Claude (Bloque 1 del prompt)" full hint='Formato: "Ejercicio | Serie | Reps | Peso(kg)". Las filas con peso ilegible ("revisar") se añaden con el peso en blanco para que lo rellenes tú.'>
-        <textarea className="input" rows={4} value={pasteSeries} onChange={(e) => setPasteSeries(e.target.value)} placeholder={"Ejercicio | Serie | Reps | Peso(kg)\n2 DB Devil Press | 1 | 15 | revisar"} />
-      </Field>
-      <div className="row" style={{ marginTop: -4 }}>
-        <button className="btn ghost sm" type="button" onClick={addPastedSeries} disabled={!pasteSeries.trim()}>Añadir series pegadas</button>
       </div>
       <p className="tiny muted" style={{ marginTop: 10 }}>Se guarda con el botón "Guardar sesión" de arriba.</p>
     </Card>
@@ -178,26 +162,132 @@ function Compare({ a }: { a: Activity }) {
   );
 }
 
+function WodEditModal({ w, onClose }: { w: Workout; onClose: () => void }) {
+  const { repo, refresh, notify } = useApp();
+  const [spec, setSpec] = useState<WodSpec>(w.spec);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    if (!repo || saving) return;
+    setSaving(true); setError(null);
+    try {
+      await repo.updateWorkout(w.id, { spec, title: spec.nombre, wod_date: spec.fecha, modality: spec.modalidad });
+      await refresh();
+      notify("WOD actualizado");
+      onClose();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setSaving(false); }
+  };
+  return (
+    <Modal title="Editar WOD" onClose={() => !saving && onClose()} wide footer={<>
+      <button className="btn" onClick={onClose} disabled={saving}>Cancelar</button>
+      <button className="btn primary" onClick={save} disabled={saving} aria-busy={saving}>{saving ? "Guardando…" : "Guardar cambios"}</button>
+    </>}>
+      <WodEditor value={spec} onChange={setSpec} />
+      {error && <div className="form-error" role="alert" style={{ marginTop: 12 }}><p>No se ha podido guardar: {error}</p><p className="muted">Tus cambios siguen aquí; puedes reintentar.</p></div>}
+    </Modal>
+  );
+}
+
+/** WOD previsto vinculado a la actividad (lo realizado se registra aparte). */
+function WodSection({ a }: { a: Activity }) {
+  const { data, run } = useApp();
+  const [editing, setEditing] = useState<Workout | null>(null);
+  const [linkId, setLinkId] = useState("");
+  const mine = data.workouts.filter((w) => w.activity_id === a.id);
+  const active = mine.filter((w) => !w.superseded_at);
+  const archived = mine.filter((w) => w.superseded_at);
+  // Candidatos para vincular: WOD sin actividad. Se ordenan primero los de su sesión planificada o su fecha, pero NUNCA se vinculan solos.
+  const plannedForThis = new Set(data.planned.filter((p) => p.completed_activity_id === a.id).map((p) => p.id));
+  const candidates = data.workouts
+    .filter((w) => !w.superseded_at && !w.activity_id)
+    .sort((x, y) => Number(plannedForThis.has(y.planned_session_id ?? "")) - Number(plannedForThis.has(x.planned_session_id ?? ""))
+      || Number(y.wod_date === a.local_date) - Number(x.wod_date === a.local_date) || y.created_at.localeCompare(x.created_at));
+
+  if (!data.wodReady) return null;
+  if (!active.length && !candidates.length && !archived.length) return null;
+
+  const archive = (w: Workout) => {
+    if (!confirm(`¿Archivar el WOD «${w.title ?? "sin nombre"}»? No se borra: podrás restaurarlo desde «Archivados».`)) return;
+    run((r) => r.setWorkoutArchived(w.id, true), "WOD archivado");
+  };
+
+  return (
+    <>
+      {active.map((w) => (
+        <Card key={w.id} title={<div className="stack" style={{ gap: 4 }}><h2>WOD previsto{w.title ? ` · ${w.title}` : ""}</h2><WodSummaryLine wod={w.spec} /></div>}
+          action={<div className="row" style={{ gap: 4 }}>
+            <button className="btn ghost sm" onClick={() => setEditing(w)}><Icon name="edit" />Editar</button>
+            <button className="btn ghost sm" onClick={() => archive(w)}><Icon name="trash" />Archivar</button>
+          </div>}>
+          <WodView wod={w.spec} />
+        </Card>
+      ))}
+      {candidates.length > 0 && (
+        <Card pad>
+          <div className="stack" style={{ gap: 8 }}>
+            <span className="small ink2">Hay {candidates.length} WOD importado(s) sin actividad. Si alguno corresponde a esta sesión, vincúlalo:</span>
+            <div className="row nowrap">
+              <select className="input" value={linkId} onChange={(e) => setLinkId(e.target.value)} aria-label="WOD para vincular">
+                <option value="">Elige un WOD…</option>
+                {candidates.map((w) => <option key={w.id} value={w.id}>{w.title ?? "Sin nombre"}{w.wod_date ? ` · ${fmtDay(w.wod_date)}` : ""}{plannedForThis.has(w.planned_session_id ?? "") ? " · de la sesión planificada de esta actividad" : ""}</option>)}
+              </select>
+              <button className="btn" disabled={!linkId} onClick={async () => {
+                const w = candidates.find((x) => x.id === linkId);
+                if (!w) return;
+                await run((r) => r.linkWorkout(w.id, { activity_id: a.id, planned_session_id: w.planned_session_id }), "WOD vinculado a esta actividad");
+                setLinkId("");
+              }}>Vincular</button>
+            </div>
+          </div>
+        </Card>
+      )}
+      {archived.length > 0 && (
+        <details className="disclosure">
+          <summary><Icon name="chevron" className="ico chev" />Archivados ({archived.length})</summary>
+          <div className="stack" style={{ gap: 6, paddingBottom: 10 }}>
+            {archived.map((w) => (
+              <div key={w.id} className="row between">
+                <span className="small">{w.title ?? "Sin nombre"} <span className="muted">· importado el {fmtDay(w.created_at.slice(0, 10))}</span></span>
+                <button className="btn ghost sm" onClick={() => run((r) => r.setWorkoutArchived(w.id, false), "WOD restaurado")}>Restaurar</button>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+      {editing && <WodEditModal w={editing} onClose={() => setEditing(null)} />}
+    </>
+  );
+}
+
 export default function ActivityDetail() {
   const { id } = useParams();
   const { data, repo, run, theme, units, tz, mode } = useApp();
   const nav = useNavigate();
   const a = data.activities.find((x) => x.id === id);
   const [streams, setStreams] = useState<Streams | null | undefined>(undefined);
-  const [sets, setSets] = useState<StrengthSet[] | null>(null);
-  const [f, setF] = useState<Feedback | null>(null);
+  const [sets, setSetsRaw] = useState<StrengthSet[] | null>(null);
+  const [f, setFRaw] = useState<Feedback | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const setSets = (s: StrengthSet[]) => { setSetsRaw(s); setDirty(true); };
+  const setF = (x: Feedback) => { setFRaw(x); setDirty(true); };
+  const reloadSets = (id: string) => {
+    if (!repo) return;
+    setSetsRaw(null);
+    repo.getStrengthSets(id).then(setSetsRaw).catch(() => setSetsRaw([]));
+  };
 
   useEffect(() => {
     if (!a || !repo) return;
     setStreams(undefined);
     repo.getStreams(a.id).then(setStreams).catch(() => setStreams(null));
-    setSets(null);
-    repo.getStrengthSets(a.id).then(setSets).catch(() => setSets([]));
+    reloadSets(a.id);
+    setDirty(false);
   }, [a?.id, repo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!a) return;
-    setF(data.feedback[a.id] ?? emptyFeedback(a.id));
+    setFRaw(data.feedback[a.id] ?? emptyFeedback(a.id));
   }, [a?.id, data.feedback]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const splits = useMemo(() => (streams && a?.category === "run" ? splitsPerKm(streams) : []), [streams, a?.category]);
@@ -209,14 +299,15 @@ export default function ActivityDetail() {
   const garmin = (a.device_name ?? "").toLowerCase().includes("garmin");
   const setCategory = (c: Sport | null) => run((r) => r.setCategoryOverride(a.id, c), c ? `Clasificada como ${SPORT_LABEL[c]}` : "Categoría automática restablecida");
   const hasExistingFeedback = Boolean(data.feedback[a.id]);
-  const saveSession = () => {
+  const saveSession = async () => {
     if (!f || sets === null) return;
     const aId = a.id;
-    run((r) => Promise.all([r.saveFeedback(f), r.saveStrengthSets(aId, sets.filter((s) => s.exercise.trim()))]), "Sesión guardada");
+    const ok = await run(async (r) => { await Promise.all([r.saveFeedback(f), r.saveStrengthSets(aId, sets.filter((s) => s.exercise.trim()))]); return true; }, "Sesión guardada");
+    if (ok) { setDirty(false); reloadSets(aId); }
   };
 
   return (
-    <>
+    <div className="touch">
       <div className="row" style={{ marginBottom: 10 }}>
         <Link to="/actividades" className="btn ghost sm"><Icon name="back" />Actividades</Link>
       </div>
@@ -228,10 +319,17 @@ export default function ActivityDetail() {
           <h1>{a.name || SPORT_LABEL[a.category]}</h1>
           <div className="sub">{fmtDayLong(a.local_date)}{a.start_time ? ` · ${fmtTime(a.start_time, tz)}` : ""} · {a.device_name ?? "Dispositivo desconocido"} · {mode === "demo" ? "Datos de demostración" : a.source === "intervals" ? `Intervals.icu${a.last_synced_at ? ` (sincronizado ${fmtDateTime(a.last_synced_at, tz)})` : ""}` : "Archivo importado"}</div>
         </div>
-        <button className="btn primary" onClick={saveSession} disabled={!f || sets === null} title={!f || sets === null ? "Cargando datos de la sesión…" : undefined}>
-          <Icon name="check" />Guardar sesión
-        </button>
+        <div className="row">
+          <button className="btn" onClick={() => setImporting(true)} disabled={dirty}
+            title={dirty ? "Guarda o descarta antes los cambios de esta sesión" : "Pegar el WOD que te devuelve ChatGPT"}>
+            <Icon name="upload" />Pegar WOD
+          </button>
+          <button className="btn primary" onClick={saveSession} disabled={!f || sets === null} title={!f || sets === null ? "Cargando datos de la sesión…" : undefined}>
+            <Icon name="check" />Guardar sesión
+          </button>
+        </div>
       </div>
+      {importing && <WodImportModal fixedActivityId={a.id} onClose={() => setImporting(false)} onSaved={() => reloadSets(a.id)} />}
 
       {(a.category_needs_review || a.api_restricted) && (
         <Card pad className="">
@@ -291,7 +389,8 @@ export default function ActivityDetail() {
             </Card>
           )}
 
-          {(a.category === "hiit" || a.category === "otro") && <StrengthLog sets={sets} setSets={setSets} />}
+          <WodSection a={a} />
+          {(a.category === "hiit" || a.category === "otro" || Boolean(sets?.length)) && <StrengthLog sets={sets} setSets={setSets} />}
           <Compare a={a} />
         </div>
 
@@ -319,6 +418,6 @@ export default function ActivityDetail() {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
