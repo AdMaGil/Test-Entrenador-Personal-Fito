@@ -4,7 +4,9 @@ import { extensionOf, makeDisplayVersion } from "../lib/photos";
 import type {
   Activity, Checkin, CoachMessage, CoachPayload, DataBundle, Feedback, Framing, Measurement, ParsedImport,
   PhotoEntry, PhotoFile, PlannedDraft, PlannedSession, Pose, Profile, Sport, StrengthEntry, StrengthSet, Streams,
+  Workout, WorkoutDraft,
 } from "../lib/types";
+import { validateWod } from "../lib/wod";
 import type { Repo } from "./repo";
 
 const BUCKET = "progress-photos";
@@ -16,9 +18,33 @@ function must<T>(res: { data: T; error: { message: string } | null }): T {
   return res.data;
 }
 
+/** La tabla o columna aún no existe: la migración de WOD no se ha aplicado. */
+function isMissingSchema(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  return ["42P01", "42703", "PGRST204", "PGRST205"].includes(err.code ?? "")
+    || /does not exist|could not find the (table|.*column)/i.test(err.message ?? "");
+}
+
+/** PostgREST devuelve una relación «a uno» como objeto; se acepta también lista por compatibilidad. */
+function embeddedOne<T>(v: T | T[] | null | undefined): T | null {
+  if (!v) return null;
+  return Array.isArray(v) ? v[0] ?? null : v;
+}
+
+const SET_COLUMNS = "id,activity_id,exercise,set_number,reps,weight_kg,duration_s,notes,status,workout_id,block_ref,item_ref,exercise_original";
+const SET_COLUMNS_LEGACY = "id,activity_id,exercise,set_number,reps,weight_kg,duration_s,notes";
+
+/** Revalida el WOD guardado: si algo no encaja, se conserva lo legible y el resto queda como no reconocido. */
+function hydrateWorkout(row: Workout): Workout {
+  const v = validateWod(row.spec);
+  return v.ok ? { ...row, spec: v.wod } : row;
+}
+
 export class SupabaseRepo implements Repo {
   readonly mode = "real" as const;
   private urlCache = new Map<string, { url: string; exp: number }>();
+  /** Se desactiva si la base de datos todavía no tiene la migración de WOD. */
+  private wodReady = true;
 
   constructor(private sb: SupabaseClient, private userId: string) {}
 
@@ -40,19 +66,24 @@ export class SupabaseRepo implements Repo {
       this.sb.from("photo_entries").select("*").order("taken_on", { ascending: false }),
       this.sb.from("photo_files").select("*"),
       this.sb.from("coach_messages").select("*").order("created_at").limit(200),
-      this.sb.from("strength_sets")
-        .select("id,exercise,set_number,reps,weight_kg,duration_s,notes,activities(local_date),planned_sessions(date)")
-        .gte("created_at", since).order("created_at", { ascending: false }).limit(3000),
+      this.loadStrength(since),
     ]);
+    const workouts = await this.sb.from("workouts").select("*").order("created_at", { ascending: true }).limit(2000);
+    if (workouts.error && !isMissingSchema(workouts.error)) throw new Error(workouts.error.message);
+    this.wodReady = !workouts.error;
     const fileRows = must(files) as PhotoFile[];
     const photoEntries = (must(entries) as Omit<PhotoEntry, "files">[]).map((e) => ({
       ...e, files: fileRows.filter((f) => f.entry_id === e.id),
     }));
     const feedback: Record<string, Feedback> = {};
     for (const f of must(fb) as Feedback[]) feedback[f.activity_id] = f;
-    type StrengthRow = StrengthSet & { id: string; activities: { local_date: string }[] | null; planned_sessions: { date: string }[] | null };
-    const strengthSets = (must(strength) as unknown as StrengthRow[])
-      .map(({ activities, planned_sessions, ...s }) => ({ ...s, date: activities?.[0]?.local_date ?? planned_sessions?.[0]?.date ?? null }))
+    type Embedded<T> = T | T[] | null;
+    type StrengthRow = StrengthSet & { id: string; activities: Embedded<{ local_date: string }>; planned_sessions: Embedded<{ date: string }> };
+    // Corrección: la relación «a uno» llega como objeto (antes se leía como lista y todas las series se descartaban)
+    const strengthSets = (strength as unknown as StrengthRow[])
+      .map(({ activities, planned_sessions, ...s }) => ({
+        ...s, date: embeddedOne(activities)?.local_date ?? embeddedOne(planned_sessions)?.date ?? null,
+      }))
       .filter((s): s is StrengthEntry => s.date !== null);
     return {
       profile: must(profile) as Profile | null,
@@ -67,7 +98,20 @@ export class SupabaseRepo implements Repo {
       photoEntries,
       coachMessages: must(msgs) as CoachMessage[],
       strengthSets,
+      workouts: this.wodReady ? (workouts.data as Workout[]).map(hydrateWorkout) : [],
+      wodReady: this.wodReady,
     };
+  }
+
+  /** Series con la fecha de su sesión. Si las columnas nuevas aún no existen, se leen las antiguas. */
+  private async loadStrength(since: string): Promise<unknown[]> {
+    const q = (cols: string) => this.sb.from("strength_sets")
+      .select(`${cols},activities(local_date),planned_sessions(date)`)
+      .gte("created_at", since).order("created_at", { ascending: false }).limit(3000);
+    const res = await q(SET_COLUMNS);
+    if (!res.error) return res.data as unknown[];
+    if (!isMissingSchema(res.error)) throw new Error(res.error.message);
+    return must(await q(SET_COLUMNS_LEGACY)) as unknown[];
   }
 
   async getStreams(activityId: string): Promise<Streams | null> {
@@ -87,7 +131,43 @@ export class SupabaseRepo implements Repo {
     must(await this.sb.from("strength_sets").insert(sets.map((s) => ({
       activity_id: activityId, exercise: s.exercise, set_number: s.set_number, reps: s.reps,
       weight_kg: s.weight_kg, duration_s: s.duration_s, notes: s.notes,
+      ...(this.wodReady ? {
+        status: s.status ?? "realizado", workout_id: s.workout_id ?? null, block_ref: s.block_ref ?? null,
+        item_ref: s.item_ref ?? null, exercise_original: s.exercise_original ?? null,
+      } : {}),
     }))));
+  }
+
+  private requireWod() {
+    if (!this.wodReady) throw new Error("Falta aplicar la migración de WOD en la base de datos (workflow «aplicar migraciones»).");
+  }
+
+  async saveWorkout(draft: WorkoutDraft, supersede: string[] = []): Promise<Workout> {
+    this.requireWod();
+    const row = { ...draft, format: "adolfo-wod", format_version: 1 };
+    // Idempotente: si este mismo intento ya se guardó (doble clic o reintento), no se duplica
+    must(await this.sb.from("workouts").upsert(row, { onConflict: "user_id,client_ref", ignoreDuplicates: true }));
+    const saved = must(await this.sb.from("workouts").select("*").eq("client_ref", draft.client_ref).single()) as Workout;
+    const others = supersede.filter((id) => id !== saved.id);
+    if (others.length) {
+      must(await this.sb.from("workouts").update({ superseded_at: new Date().toISOString() }).in("id", others).is("superseded_at", null));
+    }
+    return hydrateWorkout(saved);
+  }
+
+  async updateWorkout(id: string, patch: Partial<Pick<Workout, "title" | "wod_date" | "modality" | "spec">>): Promise<void> {
+    this.requireWod();
+    must(await this.sb.from("workouts").update(patch).eq("id", id));
+  }
+
+  async linkWorkout(id: string, link: { activity_id: string | null; planned_session_id: string | null }): Promise<void> {
+    this.requireWod();
+    must(await this.sb.from("workouts").update(link).eq("id", id));
+  }
+
+  async setWorkoutArchived(id: string, archived: boolean): Promise<void> {
+    this.requireWod();
+    must(await this.sb.from("workouts").update({ superseded_at: archived ? new Date().toISOString() : null }).eq("id", id));
   }
 
   async saveFeedback(fb: Feedback): Promise<void> {

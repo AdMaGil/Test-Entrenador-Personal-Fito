@@ -205,5 +205,53 @@ await as(A, () => db.exec(`delete from photo_entries where id = '${eid}'`));
 const orphan = await db.query(`select count(*)::int as n from photo_files where entry_id = '${eid}'`);
 ok(orphan.rows[0].n === 0, "borrar un registro elimina sus filas de archivos");
 
+// --- WOD importados (Entrega 1) ------------------------------------------
+console.log("WOD importados");
+const actA = (await as(A, () => db.query(`select id from activities limit 1`))).rows[0].id;
+const actB = (await as(B, () => db.query(`
+  insert into activities (source, external_id, local_date, category_auto) values ('import', 'imp-b', '2026-10-06', 'hiit') returning id`))).rows[0].id;
+const spec = JSON.stringify({ formato: "adolfo-wod", version: 1, bloques: [{ id: "b1", tipo: "amrap", ejercicios: [] }] });
+const w1 = await as(A, () => db.query(
+  `insert into workouts (client_ref, activity_id, spec, title) values ('ref-aaaa-0001', '${actA}', '${spec}', 'HYROX') returning id`));
+ok(w1.rows.length === 1, "A guarda un WOD vinculado a su actividad");
+const dupW = await as(A, () => db.query(
+  `insert into workouts (client_ref, spec) values ('ref-aaaa-0001', '${spec}') on conflict (user_id, client_ref) do nothing returning id`));
+ok(dupW.rows.length === 0, "repetir la misma importación (doble clic o reintento) no crea un duplicado");
+const bW = await as(B, () => db.query(`select count(*)::int as n from workouts`));
+ok(bW.rows[0].n === 0, "B no ve los WOD de A");
+await expectError(
+  () => as(B, () => db.exec(`insert into workouts (client_ref, activity_id, spec) values ('ref-bbbb-0001', '${actA}', '${spec}')`)),
+  "B no puede vincular un WOD a una actividad de A",
+);
+await expectError(
+  () => as(A, () => db.exec(`update workouts set activity_id = '${actB}' where id = '${w1.rows[0].id}'`)),
+  "A no puede vincular su WOD a una actividad de B",
+);
+const unlinked = await as(A, () => db.query(`insert into workouts (client_ref, spec) values ('ref-aaaa-0002', '${spec}') returning activity_id, planned_session_id`));
+ok(unlinked.rows[0].activity_id === null && unlinked.rows[0].planned_session_id === null, "un WOD puede guardarse sin vincular (no se crea ninguna actividad)");
+
+console.log("Series: estado y enlace");
+await as(A, () => db.exec(`insert into strength_sets (activity_id, exercise, set_number, reps, weight_kg) values ('${actA}', 'Sentadilla', 1, 5, 80)`));
+const st = (await as(A, () => db.query(`select status, workout_id, weight_kg from strength_sets where exercise = 'Sentadilla'`))).rows[0];
+ok(st.status === "realizado" && st.workout_id === null && Number(st.weight_kg) === 80, "las series existentes quedan como realizadas, sin enlace y con su peso original");
+await expectError(
+  () => as(A, () => db.exec(`insert into strength_sets (activity_id, exercise, set_number, status) values ('${actA}', 'X', 1, 'inventado')`)),
+  "el estado de una serie solo admite realizado o pendiente",
+);
+await as(A, () => db.exec(`insert into strength_sets (activity_id, exercise, set_number, reps, status, workout_id, block_ref, item_ref) values ('${actA}', 'Devil press', 1, 15, 'pendiente', '${w1.rows[0].id}', 'b1', 'e4')`));
+ok(true, "una serie puede enlazarse con el ejercicio de su WOD y quedar pendiente");
+
+console.log("Reaplicar migraciones con datos");
+for (const f of files) await db.exec(readFileSync(join(migrationsDir, f), "utf8"));
+const after = (await db.query(`select count(*)::int as n, sum(weight_kg)::numeric as kg from strength_sets`)).rows[0];
+ok(after.n === 2 && Number(after.kg) === 80, "volver a aplicar las migraciones no altera las series guardadas");
+const wAfter = (await db.query(`select count(*)::int as n from workouts`)).rows[0];
+ok(wAfter.n === 2, "volver a aplicar las migraciones no altera los WOD guardados");
+
+console.log("Borrado de una actividad importada");
+await as(A, () => db.exec(`delete from activities where id = '${actA}'`));
+const orphanW = (await db.query(`select activity_id from workouts where id = '${w1.rows[0].id}'`)).rows[0];
+ok(orphanW && orphanW.activity_id === null, "si se borra la actividad, el WOD se conserva sin vínculo");
+
 console.log(`\n${passed} correctas, ${failed} fallidas`);
 process.exit(failed ? 1 : 0);

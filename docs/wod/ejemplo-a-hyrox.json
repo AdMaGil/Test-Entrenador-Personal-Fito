@@ -1,0 +1,54 @@
+{
+  "formato": "adolfo-wod",
+  "version": 1,
+  "nombre": "HYROX",
+  "fecha": null,
+  "modalidad": null,
+  "transcripcion": "HYROX\nWARM UP x2: 1' MACHINE / 40'' PLATE FARMER HOLD / 5 INCHWORM / 10 SLAMBALL DEADLIFT\n5 RONDAS FOR TIME (36')\n10 BURPEES PLATE JUMPS\n40 M FARMER CARRY\nSLAMBALL CLEAN 3-6-9-12-15\n15 BURPEES BOX JUMPS\n20-15 CAL MACHINE\n2' REST\nR1-2 RPE 4 · R3-4 RPE 6 · R5 RPE 8",
+  "calentamiento": {
+    "rondas": 2,
+    "ejercicios": [
+      { "id": "c1", "nombre": "Máquina", "participante": null, "objetivo": { "tipo": "segundos", "valor": 60, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "1'" }, "carga": null, "equipamiento": null, "alternativas": null, "notas": null },
+      { "id": "c2", "nombre": "Plate farmer hold", "participante": null, "objetivo": { "tipo": "segundos", "valor": 40, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "40''" }, "carga": null, "equipamiento": "disco", "alternativas": null, "notas": null },
+      { "id": "c3", "nombre": "Inchworm", "participante": null, "objetivo": { "tipo": "reps", "valor": 5, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "5" }, "carga": null, "equipamiento": null, "alternativas": null, "notas": null },
+      { "id": "c4", "nombre": "Slamball deadlift", "participante": null, "objetivo": { "tipo": "reps", "valor": 10, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "10" }, "carga": null, "equipamiento": "slamball", "alternativas": null, "notas": null }
+    ],
+    "notas": null
+  },
+  "bloques": [
+    {
+      "id": "b1",
+      "titulo": "WOD",
+      "tipo": "for_time",
+      "duracion_s": null,
+      "limite_tiempo_s": null,
+      "indicacion_tiempo": "36'",
+      "rondas": 5,
+      "intervalo_s": null,
+      "rpe": [
+        { "desde_ronda": 1, "hasta_ronda": 2, "valor": 4 },
+        { "desde_ronda": 3, "hasta_ronda": 4, "valor": 6 },
+        { "desde_ronda": 5, "hasta_ronda": 5, "valor": 8 }
+      ],
+      "descanso": { "duracion_s": 120, "ubicacion": null, "texto": "2' REST" },
+      "ejercicios": [
+        { "id": "e1", "nombre": "Burpees plate jumps", "participante": null, "objetivo": { "tipo": "reps", "valor": 10, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "10" }, "carga": null, "equipamiento": "disco", "alternativas": null, "notas": null },
+        { "id": "e2", "nombre": "Farmer carry", "participante": null, "objetivo": { "tipo": "metros", "valor": 40, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "40 m" }, "carga": null, "equipamiento": null, "alternativas": null, "notas": null },
+        { "id": "e3", "nombre": "Slamball clean", "participante": null, "objetivo": { "tipo": "reps", "valor": null, "por_ronda": [3, 6, 9, 12, 15], "alternativas": null, "por_lado": null, "texto": "3-6-9-12-15" }, "carga": null, "equipamiento": "slamball", "alternativas": null, "notas": null },
+        { "id": "e4", "nombre": "Burpees box jumps", "participante": null, "objetivo": { "tipo": "reps", "valor": 15, "por_ronda": null, "alternativas": null, "por_lado": null, "texto": "15" }, "carga": null, "equipamiento": "cajón", "alternativas": null, "notas": null },
+        { "id": "e5", "nombre": "Máquina", "participante": null, "objetivo": { "tipo": "calorias", "valor": null, "por_ronda": null, "alternativas": ["20", "15"], "por_lado": null, "texto": "20-15 CAL" }, "carga": null, "equipamiento": null, "alternativas": null, "notas": null }
+      ],
+      "notas": null
+    }
+  ],
+  "resumen_enfoque": "Trabajo mixto tipo HYROX: cadena posterior y agarre (farmer carry, slamball), potencia de cadera y resistencia cardiovascular (burpees, máquina).",
+  "notas": null,
+  "ambiguedades": [
+    "La indicación «36'» junto a FOR TIME no aclara si es límite de tiempo, duración estimada u objetivo.",
+    "El descanso de 2' no indica si va entre rondas o al terminar.",
+    "«20-15 CAL MACHINE»: no se indica cuándo corresponden 20 o 15 calorías.",
+    "No se indica el tipo de máquina (remo, SkiErg, bici…).",
+    "No se indican pesos para el disco, el farmer carry ni la slamball.",
+    "No se indica si la sesión es individual o por parejas."
+  ]
+}

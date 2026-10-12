@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/icons";
 import { PageHead } from "../components/Layout";
 import { ActivityRow } from "../components/Sessions";
+import { WodImportModal } from "../components/WodImport";
 import { Card, Empty, Field, Modal } from "../components/ui";
 import { useApp } from "../data/AppData";
 import { addDays, fmtDayLong } from "../lib/dates";
@@ -102,6 +103,8 @@ export default function Activities() {
   const [maxMin, setMaxMin] = useState("");
   const [intensity, setIntensity] = useState<Intensity | "todas" | "sin">("todas");
   const [importing, setImporting] = useState(false);
+  const [pastingWod, setPastingWod] = useState(false);
+  const nav = useNavigate();
 
   const list = useMemo(() => data.activities
     .filter((a) => a.local_date >= from && a.local_date <= to)
@@ -124,7 +127,10 @@ export default function Activities() {
   return (
     <>
       <PageHead title="Actividades" sub={`${list.length} de ${data.activities.length} actividades`}
-        actions={<button className="btn" onClick={() => setImporting(true)}><Icon name="upload" />Importar archivo</button>} />
+        actions={<>
+          <button className="btn primary" onClick={() => setPastingWod(true)}><Icon name="plus" />Pegar WOD</button>
+          <button className="btn" onClick={() => setImporting(true)}><Icon name="upload" />Importar archivo</button>
+        </>} />
 
       {review.length > 0 && (
         <Card className="" pad>
@@ -160,6 +166,7 @@ export default function Activities() {
           : <Empty title="No hay actividades con estos filtros">Amplía el rango de fechas o importa un archivo.</Empty>}
       </section>
       {importing && <ImportModal onClose={() => setImporting(false)} />}
+      {pastingWod && <WodImportModal onClose={() => setPastingWod(false)} onSaved={(id) => { if (id) nav(`/actividades/${id}`); }} />}
     </>
   );
 }
