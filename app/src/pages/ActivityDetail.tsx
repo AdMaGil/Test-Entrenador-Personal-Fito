@@ -11,6 +11,7 @@ import {
 } from "../lib/format";
 import { durationOf, intensityBucket, similarSessions } from "../lib/metrics";
 import { isBike, SPORT_DESCRIPTION, SPORT_LABEL, SPORTS, sourceTypeLabel, sportColor } from "../lib/sports";
+import { parseStrengthPaste } from "../lib/strengthPaste";
 import type { Activity, Feedback, Sport, StrengthSet, Streams } from "../lib/types";
 
 const MapView = lazy(() => import("../components/MapView"));
@@ -36,7 +37,13 @@ function FeedbackForm({ a }: { a: Activity }) {
     activity_id: a.id, rpe: null, sensations: null, notes: null, terrain_notes: null,
     ebike_battery_start_pct: null, ebike_battery_end_pct: null, ebike_assist_notes: null,
   });
+  const [pasteFocus, setPasteFocus] = useState("");
   const num = (v: string) => (v === "" ? null : Number(v));
+  const addPastedFocus = () => {
+    if (!pasteFocus.trim()) return;
+    setF({ ...f, notes: f.notes ? `${f.notes}\n\n${pasteFocus.trim()}` : pasteFocus.trim() });
+    setPasteFocus("");
+  };
   return (
     <Card title="Esfuerzo percibido y sensaciones" action={existing ? <OriginBadge origin="manual" /> : null}>
       <div className="form-grid">
@@ -59,6 +66,12 @@ function FeedbackForm({ a }: { a: Activity }) {
           </>
         )}
         <Field label="Notas" full><textarea className="input" value={f.notes ?? ""} onChange={(e) => setF({ ...f, notes: e.target.value || null })} /></Field>
+        <Field label="Pegar resumen de enfoque (Bloque 2 del prompt de Claude)" full hint="Pega aquí el resumen de grupos musculares y estímulo que te devuelve Claude al analizar la foto del WOD.">
+          <textarea className="input" rows={3} value={pasteFocus} onChange={(e) => setPasteFocus(e.target.value)} placeholder={"Grupos musculares: ...\nEstímulo: ...\nDesequilibrio: ..."} />
+        </Field>
+        <div className="row" style={{ marginTop: -8, marginBottom: 4 }}>
+          <button className="btn ghost sm" type="button" onClick={addPastedFocus} disabled={!pasteFocus.trim()}>Añadir a notas</button>
+        </div>
       </div>
       <div className="row" style={{ marginTop: 12 }}><button className="btn primary" onClick={() => run((r) => r.saveFeedback(f), "Guardado")}>Guardar</button></div>
     </Card>
@@ -68,9 +81,17 @@ function FeedbackForm({ a }: { a: Activity }) {
 function StrengthLog({ a }: { a: Activity }) {
   const { repo, notify } = useApp();
   const [sets, setSets] = useState<StrengthSet[] | null>(null);
+  const [pasteSeries, setPasteSeries] = useState("");
   useEffect(() => { repo?.getStrengthSets(a.id).then(setSets).catch(() => setSets([])); }, [repo, a.id]);
   if (!sets) return null;
   const upd = (i: number, patch: Partial<StrengthSet>) => setSets(sets.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  const addPastedSeries = () => {
+    const parsed = parseStrengthPaste(pasteSeries);
+    if (!parsed.length) { notify("No se ha reconocido ninguna serie en el texto pegado", "error"); return; }
+    setSets([...sets, ...parsed]);
+    setPasteSeries("");
+    notify(`${parsed.length} serie(s) añadidas — revisa los pesos marcados como vacíos antes de guardar`);
+  };
   const add = () => {
     const last = sets[sets.length - 1];
     setSets([...sets, { exercise: last?.exercise ?? "", set_number: last ? last.set_number + 1 : 1, reps: last?.reps ?? null, weight_kg: last?.weight_kg ?? null, duration_s: null, notes: null }]);
@@ -107,6 +128,12 @@ function StrengthLog({ a }: { a: Activity }) {
       <div className="row" style={{ marginTop: 10 }}>
         <button className="btn" onClick={add}><Icon name="plus" />Añadir serie</button>
         <button className="btn primary" onClick={save}>Guardar ejercicios</button>
+      </div>
+      <Field label="Pegar series desde Claude (Bloque 1 del prompt)" full hint='Formato: "Ejercicio | Serie | Reps | Peso(kg)". Las filas con peso ilegible ("revisar") se añaden con el peso en blanco para que lo rellenes tú.'>
+        <textarea className="input" rows={4} value={pasteSeries} onChange={(e) => setPasteSeries(e.target.value)} placeholder={"Ejercicio | Serie | Reps | Peso(kg)\n2 DB Devil Press | 1 | 15 | revisar"} />
+      </Field>
+      <div className="row" style={{ marginTop: -4 }}>
+        <button className="btn ghost sm" type="button" onClick={addPastedSeries} disabled={!pasteSeries.trim()}>Añadir series pegadas</button>
       </div>
     </Card>
   );
