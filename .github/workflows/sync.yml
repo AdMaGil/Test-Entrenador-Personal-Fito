@@ -2,13 +2,14 @@ name: Sync training + body composition data
 
 on:
   schedule:
-    - cron: "0 6 * * *"
+    # Cada 6 horas (UTC). La sincronización es incremental y deduplicada.
+    - cron: "17 */6 * * *"
   workflow_dispatch:
     inputs:
       lookback_days:
-        description: "Dias hacia atras a sincronizar (por defecto 30; usa un numero mayor para una recarga puntual del historico)"
+        description: "Recarga puntual: dias hacia atras (vacio = incremental automatico)"
         required: false
-        default: "30"
+        default: ""
 
 jobs:
   sync:
@@ -22,6 +23,9 @@ jobs:
 
       - name: Instalar dependencias
         run: pip install -r scripts/requirements.txt
+
+      - name: Pruebas de la sincronizacion
+        run: python -m unittest scripts/test_intervals_sync.py
 
       - name: Forzar DNS publico (Cloudflare/Google)
         run: |
@@ -59,4 +63,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || '30' }}
+          FORCE_LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days }}
         run: python scripts/sync_intervals.py

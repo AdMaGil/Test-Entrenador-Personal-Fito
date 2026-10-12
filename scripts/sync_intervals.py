@@ -152,6 +152,9 @@ def main():
 
 
 if __name__ == "__main__":
+    exit_code = 0
+
+    # 1) Tablas heredadas del panel original (se mantiene hasta el cambio a la nueva app)
     try:
         main()
     except Exception as exc:
@@ -159,4 +162,16 @@ if __name__ == "__main__":
         # up as a check-run annotation (readable via the REST API), not
         # just in the raw log stream.
         print(f"::error::sync_intervals.py fallo: {type(exc).__name__}: {exc}", file=sys.stderr)
-        raise
+        exit_code = 1
+
+    # 2) Modelo de datos de Adolfo Training (se omite si las migraciones no están aplicadas)
+    try:
+        import intervals_sync
+
+        if intervals_sync.main() != 0:
+            exit_code = 1
+    except Exception as exc:  # noqa: BLE001
+        print(f"::error::intervals_sync fallo: {type(exc).__name__}: {exc}", file=sys.stderr)
+        exit_code = 1
+
+    sys.exit(exit_code)

@@ -1,0 +1,7 @@
+{
+  "name": "adolfo-training-db-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node run_migrations_test.mjs" },
+  "devDependencies": { "@electric-sql/pglite": "0.2.17" }
+}
