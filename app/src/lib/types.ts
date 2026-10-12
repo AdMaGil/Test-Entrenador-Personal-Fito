@@ -132,6 +132,12 @@ export interface StrengthSet {
   notes: string | null;
 }
 
+/** Una serie de fuerza con la fecha de la sesión a la que pertenece (actividad o sesión planificada). */
+export interface StrengthEntry extends StrengthSet {
+  id: string;
+  date: string;
+}
+
 export interface Units {
   weight: "kg" | "lb";
   distance: "km" | "mi";
@@ -236,6 +242,7 @@ export interface DataBundle {
   syncRuns: SyncRun[];
   photoEntries: PhotoEntry[];
   coachMessages: CoachMessage[];
+  strengthSets: StrengthEntry[];
 }
 
 export interface ParsedImport {

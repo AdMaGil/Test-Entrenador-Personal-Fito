@@ -45,5 +45,5 @@ export interface Repo {
 
 export const EMPTY_BUNDLE: DataBundle = {
   profile: null, activities: [], wellness: [], measurements: [], checkins: [], planned: [], feedback: {},
-  connection: null, syncRuns: [], photoEntries: [], coachMessages: [],
+  connection: null, syncRuns: [], photoEntries: [], coachMessages: [], strengthSets: [],
 };
