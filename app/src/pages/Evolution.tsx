@@ -78,7 +78,7 @@ export default function Evolution() {
 
   return (
     <>
-      <PageHead title="Evolución" sub={`${fmtDay(period.from)} – ${fmtDay(period.to)} · comparado con ${fmtDay(prevP.from)} – ${fmtDay(prevP.to)}`}
+      <PageHead title="Entrenamiento" sub={`${fmtDay(period.from)} – ${fmtDay(period.to)} · comparado con ${fmtDay(prevP.from)} – ${fmtDay(prevP.to)}`}
         actions={<Segmented label="Periodo" value={range} onChange={setRange} options={[
           { value: "7", label: "7 días" }, { value: "28", label: "28 días" }, { value: "90", label: "90 días" },
           { value: "365", label: "1 año" }, { value: "custom", label: "Personalizado" }]} />} />

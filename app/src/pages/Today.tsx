@@ -166,8 +166,17 @@ export default function Today() {
     if (!p?.goals) setupPending.push("escribir tus objetivos");
   }
 
+  // Acceso directo a registrar el WOD de hoy sin tener que buscarlo en Actividades.
+  const todaysWod = data.activities.find((a) => a.local_date === today && (a.category === "hiit" || a.category === "otro"));
+
   return (
     <>
+      {todaysWod && (
+        <div className="card pad row between" style={{ marginBottom: 14 }}>
+          <span className="status ok"><Icon name="check" />Tienes un entrenamiento de hoy — registra series y pesos antes de que se te olvide.</span>
+          <Link className="btn sm primary" to={`/actividades/${todaysWod.id}`}>Registrar WOD de hoy</Link>
+        </div>
+      )}
       {setupPending.length > 0 && (
         <div className="card pad row between" style={{ marginBottom: 14 }}>
           <span className="status info"><Icon name="info" />Para completar la configuración falta {setupPending.join(", ")}.</span>

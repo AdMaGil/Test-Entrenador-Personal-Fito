@@ -30,13 +30,14 @@ function splitsPerKm(s: Streams): { km: number; secs: number }[] {
   return out;
 }
 
-function FeedbackForm({ a }: { a: Activity }) {
-  const { data, run } = useApp();
-  const existing = data.feedback[a.id];
-  const [f, setF] = useState<Feedback>(existing ?? {
-    activity_id: a.id, rpe: null, sensations: null, notes: null, terrain_notes: null,
+function emptyFeedback(activityId: string): Feedback {
+  return {
+    activity_id: activityId, rpe: null, sensations: null, notes: null, terrain_notes: null,
     ebike_battery_start_pct: null, ebike_battery_end_pct: null, ebike_assist_notes: null,
-  });
+  };
+}
+
+function FeedbackForm({ a, f, setF, hasExisting }: { a: Activity; f: Feedback; setF: (f: Feedback) => void; hasExisting: boolean }) {
   const [pasteFocus, setPasteFocus] = useState("");
   const num = (v: string) => (v === "" ? null : Number(v));
   const addPastedFocus = () => {
@@ -45,7 +46,7 @@ function FeedbackForm({ a }: { a: Activity }) {
     setPasteFocus("");
   };
   return (
-    <Card title="Esfuerzo percibido y sensaciones" action={existing ? <OriginBadge origin="manual" /> : null}>
+    <Card title="Esfuerzo percibido y sensaciones" action={hasExisting ? <OriginBadge origin="manual" /> : null}>
       <div className="form-grid">
         <Field label="Esfuerzo percibido (RPE 1–10)" full>
           <div className="scale" style={{ gridTemplateColumns: "repeat(10, 1fr)" }} role="radiogroup" aria-label="RPE">
@@ -73,16 +74,14 @@ function FeedbackForm({ a }: { a: Activity }) {
           <button className="btn ghost sm" type="button" onClick={addPastedFocus} disabled={!pasteFocus.trim()}>Añadir a notas</button>
         </div>
       </div>
-      <div className="row" style={{ marginTop: 12 }}><button className="btn primary" onClick={() => run((r) => r.saveFeedback(f), "Guardado")}>Guardar</button></div>
+      <p className="tiny muted" style={{ marginTop: 12 }}>Se guarda con el botón "Guardar sesión" de arriba.</p>
     </Card>
   );
 }
 
-function StrengthLog({ a }: { a: Activity }) {
-  const { repo, notify } = useApp();
-  const [sets, setSets] = useState<StrengthSet[] | null>(null);
+function StrengthLog({ sets, setSets }: { sets: StrengthSet[] | null; setSets: (s: StrengthSet[]) => void }) {
+  const { notify } = useApp();
   const [pasteSeries, setPasteSeries] = useState("");
-  useEffect(() => { repo?.getStrengthSets(a.id).then(setSets).catch(() => setSets([])); }, [repo, a.id]);
   if (!sets) return null;
   const upd = (i: number, patch: Partial<StrengthSet>) => setSets(sets.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   const addPastedSeries = () => {
@@ -90,17 +89,11 @@ function StrengthLog({ a }: { a: Activity }) {
     if (!parsed.length) { notify("No se ha reconocido ninguna serie en el texto pegado", "error"); return; }
     setSets([...sets, ...parsed]);
     setPasteSeries("");
-    notify(`${parsed.length} serie(s) añadidas — revisa los pesos marcados como vacíos antes de guardar`);
+    notify(`${parsed.length} serie(s) añadidas — revisa los pesos marcados como vacíos y pulsa "Guardar sesión" arriba`);
   };
   const add = () => {
     const last = sets[sets.length - 1];
     setSets([...sets, { exercise: last?.exercise ?? "", set_number: last ? last.set_number + 1 : 1, reps: last?.reps ?? null, weight_kg: last?.weight_kg ?? null, duration_s: null, notes: null }]);
-  };
-  const save = async () => {
-    try {
-      await repo?.saveStrengthSets(a.id, sets.filter((s) => s.exercise.trim()));
-      notify("Ejercicios guardados");
-    } catch (e) { notify(e instanceof Error ? e.message : String(e), "error"); }
   };
   const n = (v: string) => (v === "" ? null : Number(v));
   const volume = sets.reduce((acc, s) => acc + (s.reps ?? 0) * (s.weight_kg ?? 0), 0);
@@ -127,7 +120,6 @@ function StrengthLog({ a }: { a: Activity }) {
       ) : <p className="small muted">Aún no has registrado ejercicios para esta sesión.</p>}
       <div className="row" style={{ marginTop: 10 }}>
         <button className="btn" onClick={add}><Icon name="plus" />Añadir serie</button>
-        <button className="btn primary" onClick={save}>Guardar ejercicios</button>
       </div>
       <Field label="Pegar series desde Claude (Bloque 1 del prompt)" full hint='Formato: "Ejercicio | Serie | Reps | Peso(kg)". Las filas con peso ilegible ("revisar") se añaden con el peso en blanco para que lo rellenes tú.'>
         <textarea className="input" rows={4} value={pasteSeries} onChange={(e) => setPasteSeries(e.target.value)} placeholder={"Ejercicio | Serie | Reps | Peso(kg)\n2 DB Devil Press | 1 | 15 | revisar"} />
@@ -135,6 +127,7 @@ function StrengthLog({ a }: { a: Activity }) {
       <div className="row" style={{ marginTop: -4 }}>
         <button className="btn ghost sm" type="button" onClick={addPastedSeries} disabled={!pasteSeries.trim()}>Añadir series pegadas</button>
       </div>
+      <p className="tiny muted" style={{ marginTop: 10 }}>Se guarda con el botón "Guardar sesión" de arriba.</p>
     </Card>
   );
 }
@@ -191,12 +184,21 @@ export default function ActivityDetail() {
   const nav = useNavigate();
   const a = data.activities.find((x) => x.id === id);
   const [streams, setStreams] = useState<Streams | null | undefined>(undefined);
+  const [sets, setSets] = useState<StrengthSet[] | null>(null);
+  const [f, setF] = useState<Feedback | null>(null);
 
   useEffect(() => {
     if (!a || !repo) return;
     setStreams(undefined);
     repo.getStreams(a.id).then(setStreams).catch(() => setStreams(null));
+    setSets(null);
+    repo.getStrengthSets(a.id).then(setSets).catch(() => setSets([]));
   }, [a?.id, repo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!a) return;
+    setF(data.feedback[a.id] ?? emptyFeedback(a.id));
+  }, [a?.id, data.feedback]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const splits = useMemo(() => (streams && a?.category === "run" ? splitsPerKm(streams) : []), [streams, a?.category]);
 
@@ -206,6 +208,12 @@ export default function ActivityDetail() {
   const bike = isBike(a.category);
   const garmin = (a.device_name ?? "").toLowerCase().includes("garmin");
   const setCategory = (c: Sport | null) => run((r) => r.setCategoryOverride(a.id, c), c ? `Clasificada como ${SPORT_LABEL[c]}` : "Categoría automática restablecida");
+  const hasExistingFeedback = Boolean(data.feedback[a.id]);
+  const saveSession = () => {
+    if (!f || sets === null) return;
+    const aId = a.id;
+    run((r) => Promise.all([r.saveFeedback(f), r.saveStrengthSets(aId, sets.filter((s) => s.exercise.trim()))]), "Sesión guardada");
+  };
 
   return (
     <>
@@ -220,6 +228,9 @@ export default function ActivityDetail() {
           <h1>{a.name || SPORT_LABEL[a.category]}</h1>
           <div className="sub">{fmtDayLong(a.local_date)}{a.start_time ? ` · ${fmtTime(a.start_time, tz)}` : ""} · {a.device_name ?? "Dispositivo desconocido"} · {mode === "demo" ? "Datos de demostración" : a.source === "intervals" ? `Intervals.icu${a.last_synced_at ? ` (sincronizado ${fmtDateTime(a.last_synced_at, tz)})` : ""}` : "Archivo importado"}</div>
         </div>
+        <button className="btn primary" onClick={saveSession} disabled={!f || sets === null} title={!f || sets === null ? "Cargando datos de la sesión…" : undefined}>
+          <Icon name="check" />Guardar sesión
+        </button>
       </div>
 
       {(a.category_needs_review || a.api_restricted) && (
@@ -280,7 +291,7 @@ export default function ActivityDetail() {
             </Card>
           )}
 
-          {(a.category === "hiit" || a.category === "otro") && <StrengthLog a={a} />}
+          {(a.category === "hiit" || a.category === "otro") && <StrengthLog sets={sets} setSets={setSets} />}
           <Compare a={a} />
         </div>
 
@@ -297,7 +308,7 @@ export default function ActivityDetail() {
               </Field>
             </div>
           </Card>
-          <FeedbackForm a={a} />
+          {f && <FeedbackForm a={a} f={f} setF={setF} hasExisting={hasExistingFeedback} />}
           {garmin && <p className="tiny muted">Datos registrados con un dispositivo Garmin.</p>}
           {a.source === "import" && (
             <button className="btn danger" onClick={async () => {
