@@ -171,6 +171,17 @@ Devuelve solo el bloque ```json con el WOD completo.
 | Dónde | Qué |
 |---|---|
 | `workouts` | WOD previsto validado (`spec`), texto original, vínculo opcional a actividad o sesión planificada, `client_ref` contra duplicados. Al **sustituir**, el anterior queda archivado (`superseded_at`), no se borra. |
-| `strength_sets` | Series realizadas. Columnas nuevas opcionales: `status` (`realizado`/`pendiente`), `workout_id`, `block_ref`, `item_ref`, `exercise_original`. Las series antiguas no cambian. |
+| `strength_sets` | Series realizadas. Columnas nuevas opcionales: `status` (`realizado`/`pendiente`), `workout_id`, `block_ref`, `item_ref`, `exercise_original`, `load_mode` (`total`/`por_implemento`/`sin_carga`; NULL = sin aclarar), `implements`, `load_per_implement_kg`, `reps_scope`, `distance_m`, `calories`. `weight_kg` es la carga externa total. Las series antiguas no cambian. |
+| `workout_block_results` | Resultado por bloque: estado (pendiente/hecho/no hecho), `personal` y, en parejas, `team` por separado (nunca repartido), RPE, adaptaciones y notas. |
+| `save_activity_session()` | Guarda notas, series y resultados de una actividad en una sola transacción. |
 
 Importar un WOD **no crea ninguna actividad** ni lo vincula por fecha: el vínculo lo eliges tú.
+
+## Uso en la app
+
+1. **Pegar WOD** (Hoy, Actividades o el detalle de una actividad) → pega el bloque → **Revisar** → corrige → elige el vínculo → **Guardar WOD**.
+2. En la actividad, pestaña **WOD y resultado**: en cada ejercicio, **Añadir serie** y escribe lo que hiciste. Carga: `kg total`, `kg c/u` (nº × peso de cada implemento) o `sin carga`. En cada bloque, **Mi resultado**: Hecho / No hecho y sus datos; en parejas, equipo y tu contribución por separado (vacía = desconocida).
+3. Pulsa **Guardar** en la barra inferior. «Guardado» solo aparece cuando el servidor lo confirma.
+4. **Última vez** junto a cada ejercicio muestra tu sesión anterior como referencia; no se copia como resultado.
+5. Lo pendiente (bloques sin resultado, series con datos por completar) aparece en **Hoy** y en **Actividades** («Solo con registro pendiente»).
+6. En **Entrenamiento → Fuerza** solo entran en gráfica y comparación las series realizadas con la carga resuelta; las antiguas «sin aclarar» se listan aparte hasta que las aclares al editar.

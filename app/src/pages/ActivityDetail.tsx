@@ -5,7 +5,7 @@ import { Icon } from "../components/icons";
 import { intensityLabel } from "../components/Sessions";
 import { BlockResultForm, ExerciseLog, SaveBar, type LocalSet, type SaveState } from "../components/SessionLog";
 import { Card, Field, Modal, OriginBadge, Segmented, SportChip, Stat, Empty } from "../components/ui";
-import { WodBlockCard, WodEditor, WodExtras, WodSummaryLine } from "../components/Wod";
+import { PendingFlag, WodBlockCard, WodEditor, WodExtras, WodSummaryLine } from "../components/Wod";
 import { WodImportModal } from "../components/WodImport";
 import { useApp } from "../data/AppData";
 import { fmtDateTime, fmtDay, fmtDayLong, fmtTime } from "../lib/dates";
@@ -13,6 +13,7 @@ import {
   fmtClock, fmtDistance, fmtDuration, fmtElevation, fmtHr, fmtNum, fmtPace, fmtSpeed, isNum,
 } from "../lib/format";
 import { normalizeSetForSave } from "../lib/loads";
+import { canonicalName, describeSet, exerciseCatalog, exerciseKey, lastTime } from "../lib/exercises";
 import { durationOf, intensityBucket, similarSessions } from "../lib/metrics";
 import {
   duplicateSet, emptyResult, isResultTouched, newSetFor, nextSetNumber, normalizeResultForSave, resultKey,
@@ -200,6 +201,47 @@ function WodLinkTools({ a }: { a: Activity }) {
   );
 }
 
+/** Referencia «Última vez»: se muestra, pero nunca se registra como resultado actual. */
+function LastTimeRef({ exercise, a }: { exercise: string; a: Activity }) {
+  const { data } = useApp();
+  const key = exerciseKey(exercise);
+  if (!key) return null;
+  const last = lastTime(data.strengthSets, key, { activityId: a.id, date: a.local_date });
+  if (!last) return <span className="ref-line">Primer registro de este ejercicio</span>;
+  return (
+    <span className="ref-line">
+      <span className="tag-ref">Última vez</span>
+      {last.activityId ? <Link to={`/actividades/${last.activityId}`}>{fmtDay(last.date)}</Link> : fmtDay(last.date)}
+      {": "}{last.sets.map(describeSet).join(" ; ")}
+      {last.ambiguous && <> <PendingFlag>histórico con carga sin aclarar</PendingFlag></>}
+    </span>
+  );
+}
+
+/** Corrige a qué ejercicio del histórico se asocia un ejercicio importado (sin fusionar nada automáticamente). */
+function AssocEditor({ original, current, catalog, onChange }: {
+  original: string; current: string; catalog: { key: string; name: string }[]; onChange: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const listId = `cat-${exerciseKey(original).replace(/[^a-z0-9]/g, "-")}`;
+  if (!open) {
+    return (
+      <span className="row" style={{ gap: 6 }}>
+        {current !== original && <span className="tiny muted">Importado como «{original}»</span>}
+        <button type="button" className="btn ghost sm" onClick={() => setOpen(true)}>Cambiar ejercicio asociado</button>
+      </span>
+    );
+  }
+  return (
+    <span className="row nowrap" style={{ gap: 6 }}>
+      <input className="input" list={listId} defaultValue={current} aria-label="Ejercicio asociado" autoFocus
+        onKeyDown={(e) => { if (e.key === "Enter") { onChange((e.target as HTMLInputElement).value); setOpen(false); } }}
+        onBlur={(e) => { onChange(e.target.value); setOpen(false); }} />
+      <datalist id={listId}>{catalog.map((c) => <option key={c.key} value={c.name} />)}</datalist>
+    </span>
+  );
+}
+
 type Tab = "registro" | "reloj";
 
 export default function ActivityDetail() {
@@ -316,7 +358,7 @@ export default function ActivityDetail() {
     const fresh: LocalSet = last
       ? { ...duplicateSet(last, n), reps: null, duration_s: null, distance_m: null, calories: null, notes: null,
           weight_kg: last.load_mode === "total" ? null : last.weight_kg, load_per_implement_kg: null, status: "realizado", _k: `k${++keySeq}` }
-      : { ...newSetFor(item, { workoutId: w?.id ?? null, blockRef, setNumber: n, exercise }), _k: `k${++keySeq}` };
+      : { ...newSetFor(item, { workoutId: w?.id ?? null, blockRef, setNumber: n, exercise: exercise ?? same[0]?.exercise }), _k: `k${++keySeq}` };
     if (last && last.load_mode == null) { fresh.load_mode = "total"; fresh.weight_kg = null; }
     const idx = cur.lastIndexOf(last as LocalSet);
     return idx >= 0 ? [...cur.slice(0, idx + 1), fresh, ...cur.slice(idx + 1)] : [...cur, fresh];
@@ -330,7 +372,11 @@ export default function ActivityDetail() {
     window.clearTimeout(savedTimer.current);
     try {
       const modalityOf = (wid: string) => activeWods.find((w) => w.id === wid)?.spec.modalidad ?? null;
-      const cleanSets = strip(sets).filter((s) => s.exercise.trim()).map(normalizeSetForSave);
+      // Evita duplicados triviales («sentadilla  trasera» = «Sentadilla trasera»); el nombre importado se conserva aparte
+      const cat = exerciseCatalog(data.strengthSets.filter((x) => x.activity_id !== a.id));
+      const cleanSets = strip(sets).filter((s) => s.exercise.trim())
+        .map((s) => ({ ...s, exercise: canonicalName(s.exercise, cat) }))
+        .map(normalizeSetForSave);
       // Se envían los resultados tocados y también los que existían (por si se han vaciado)
       const outResults = Object.values(results)
         .filter((r) => isResultTouched(r) || serverResults[resultKey(r)])
@@ -382,6 +428,14 @@ export default function ActivityDetail() {
   const strengthy = a.category === "hiit" || a.category === "otro";
   const loading = sets === null || f === null;
 
+  const catalog = exerciseCatalog(data.strengthSets);
+  const nameFor = (w: Workout, it: WodItem) => setsOf(w, it)[0]?.exercise || it.nombre;
+  const associate = (w: Workout, it: WodItem, name: string) => {
+    const clean = canonicalName(name, catalog);
+    if (!clean) return;
+    setSets((cur) => cur && cur.map((s) => (s.workout_id === w.id && s.item_ref === it.id
+      ? { ...s, exercise: clean, exercise_original: clean === it.nombre ? null : it.nombre } : s)));
+  };
   const resultFor = (w: Workout, blockRef: string) => results[`${w.id}:${blockRef}`] ?? emptyResult(w.id, blockRef);
   const setResult = (r: BlockResult) => setResults((cur) => ({ ...cur, [resultKey(r)]: r }));
 
@@ -435,7 +489,9 @@ export default function ActivityDetail() {
                           <>
                             {b.ejercicios.map((it) => (
                               <ExerciseLog key={it.id} item={it} sets={setsOf(w, it)}
-                                title={<>{w.spec.modalidad === "parejas" && it.participante && <span className="who">{it.participante}</span>}{it.nombre}</>}
+                                title={<>{w.spec.modalidad === "parejas" && it.participante && <span className="who">{it.participante}</span>}{nameFor(w, it)}</>}
+                                header={setsOf(w, it).length > 0 ? <AssocEditor original={it.nombre} current={nameFor(w, it)} catalog={catalog} onChange={(n) => associate(w, it, n)} /> : null}
+                                reference={<LastTimeRef exercise={nameFor(w, it)} a={a} />}
                                 onAdd={() => addSetFor(w, b.id, it)} onChangeSet={patchSet} onDuplicate={duplicate} onRemove={removeSet} />
                             ))}
                             {data.resultsReady && <BlockResultForm block={b} modality={w.spec.modalidad} result={resultFor(w, b.id)} onChange={setResult} />}
@@ -453,10 +509,11 @@ export default function ActivityDetail() {
                   <div className="stack" style={{ gap: 12 }}>
                     {[...otherGroups.entries()].map(([k, group]) => (
                       <ExerciseLog key={k || "_"} item={null} sets={group}
-                        title={<input className="input ex-name" aria-label="Nombre del ejercicio" value={group[0].exercise}
+                        title={<input className="input ex-name" aria-label="Nombre del ejercicio" value={group[0].exercise} list="cat-all"
                           placeholder="Nombre del ejercicio" onChange={(e) => renameGroup(k, e.target.value)} />}
-                        reference={group.some((s) => s.exercise_original && s.exercise_original !== s.exercise)
+                        header={group.some((s) => s.exercise_original && s.exercise_original !== s.exercise)
                           ? <span className="tiny muted">Importado como «{group.find((s) => s.exercise_original)?.exercise_original}»</span> : null}
+                        reference={<LastTimeRef exercise={group[0].exercise} a={a} />}
                         onAdd={() => addSetFor(null, null, null, group[0].exercise)} onChangeSet={patchSet} onDuplicate={duplicate} onRemove={removeSet} />
                     ))}
                     {otherGroups.size === 0 && !activeWods.length && <p className="small muted">Aún no hay series. Pega el WOD o añade un ejercicio.</p>}
@@ -469,6 +526,7 @@ export default function ActivityDetail() {
                 </Card>
               )}
 
+              <datalist id="cat-all">{catalog.map((c) => <option key={c.key} value={c.name} />)}</datalist>
               {f && <FeedbackForm a={a} f={f} setF={setF} hasExisting={Boolean(data.feedback[a.id])} />}
               <WodLinkTools a={a} />
             </>

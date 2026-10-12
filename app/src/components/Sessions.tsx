@@ -177,16 +177,22 @@ export function ActivityMetrics({ a }: { a: Activity }) {
   return <>{parts.join(" · ")}</>;
 }
 
-export function ActivityRow({ a }: { a: Activity }) {
+/**
+ * Fila de actividad. `wodTitle`, `tags` y `pending` son opcionales (Hoy y Actividades):
+ * si no se pasan, la fila se ve igual que antes.
+ */
+export function ActivityRow({ a, wodTitle, tags, pending }: { a: Activity; wodTitle?: string | null; tags?: string[]; pending?: string | null }) {
   const { theme } = useApp();
   const ib = intensityBucket(a);
   return (
     <Link to={`/actividades/${a.id}`} className="list-item">
       <span className="sw" style={{ background: sportColor(a.category, theme) }} aria-hidden="true" />
       <span style={{ minWidth: 0 }}>
-        <span className="t" style={{ display: "block" }}>{a.name || SPORT_LABEL[a.category]}</span>
+        <span className="t" style={{ display: "block" }}>{wodTitle || a.name || SPORT_LABEL[a.category]}</span>
         <span className="m">
           <span>{SPORT_LABEL[a.category]}</span>
+          {tags?.map((t) => <span key={t} className="badge">{t}</span>)}
+          {pending && <span className="pending-flag" title={pending}><Icon name="alert" />Registro pendiente</span>}
           <span>{fmtDayLong(a.local_date)}</span>
           {a.category_needs_review && <span style={{ color: "var(--warn)" }}>Revisar categoría</span>}
           {a.source === "import" && <span>Importada</span>}
