@@ -248,6 +248,72 @@ ok(after.n === 2 && Number(after.kg) === 80, "volver a aplicar las migraciones n
 const wAfter = (await db.query(`select count(*)::int as n from workouts`)).rows[0];
 ok(wAfter.n === 2, "volver a aplicar las migraciones no altera los WOD guardados");
 
+console.log("Guardado atómico de la sesión (Entrega 2)");
+const act2 = (await as(A, () => db.query(`
+  insert into activities (source, external_id, local_date, category_auto, avg_hr, training_load) values ('import', 'imp-2', '2026-10-07', 'hiit', 140, 55) returning id`))).rows[0].id;
+const w2 = (await as(A, () => db.query(`insert into workouts (client_ref, activity_id, spec) values ('ref-aaaa-0003', '${act2}', '${spec}') returning id`))).rows[0].id;
+await as(A, () => db.exec(`insert into strength_sets (activity_id, exercise, set_number, reps, weight_kg) values ('${act2}', 'Legacy', 1, 10, 15)`));
+const legacyRow = (await db.query(`select load_mode, weight_kg from strength_sets where exercise = 'Legacy'`)).rows[0];
+ok(legacyRow.load_mode === null && Number(legacyRow.weight_kg) === 15, "las series antiguas quedan con la carga «sin aclarar» y su valor original");
+const sets = JSON.stringify([
+  { exercise: "Devil press", set_number: 1, reps: 15, weight_kg: 30, load_mode: "por_implemento", implements: 2, load_per_implement_kg: 15, reps_scope: "total", status: "realizado", workout_id: w2, block_ref: "b1", item_ref: "e4" },
+  { exercise: "Farmer carry", set_number: 1, distance_m: 40, status: "pendiente" },
+]);
+const results = JSON.stringify([{ workout_id: w2, block_ref: "b1", status: "realizado", team: { time_s: 170 }, personal: {}, rpe: 8 }]);
+await as(A, () => db.exec(`select save_activity_session('${act2}', '{"rpe": 7, "notes": "bien"}'::jsonb, '${sets}'::jsonb, '${results}'::jsonb)`));
+const saved = (await as(A, () => db.query(`select exercise, weight_kg, implements, load_mode from strength_sets where activity_id = '${act2}' order by exercise`))).rows;
+ok(saved.length === 2 && saved[0].exercise === "Devil press" && Number(saved[0].weight_kg) === 30 && saved[0].implements === 2,
+  "se guardan las series con «2 × 15 kg» como 30 kg totales y 2 implementos");
+const res = (await as(A, () => db.query(`select status, team, personal, rpe from workout_block_results where workout_id = '${w2}'`))).rows[0];
+ok(res.status === "realizado" && res.team.time_s === 170 && Object.keys(res.personal).length === 0, "el resultado del equipo no se atribuye a la contribución personal");
+const fb = (await as(A, () => db.query(`select rpe, notes from activity_feedback where activity_id = '${act2}'`))).rows[0];
+ok(fb.rpe === 7 && fb.notes === "bien", "se guardan RPE y notas en la misma operación");
+const metrics = (await db.query(`select avg_hr, training_load from activities where id = '${act2}'`)).rows[0];
+ok(Number(metrics.avg_hr) === 140 && Number(metrics.training_load) === 55, "guardar la sesión no toca las métricas del reloj");
+
+const badSets = JSON.stringify([{ exercise: "X", set_number: 1, reps: 5, load_mode: "por_implemento" }]);
+await expectError(
+  () => as(A, () => db.exec(`select save_activity_session('${act2}', '{"rpe": 2}'::jsonb, '${badSets}'::jsonb, null)`)),
+  "«por implemento» sin número de implementos se rechaza",
+);
+const still = (await as(A, () => db.query(`select count(*)::int as n from strength_sets where activity_id = '${act2}'`))).rows[0].n;
+const fbStill = (await as(A, () => db.query(`select rpe from activity_feedback where activity_id = '${act2}'`))).rows[0].rpe;
+ok(still === 2 && fbStill === 7, "si falla el guardado no queda nada a medias (series y notas intactas)");
+
+await as(A, () => db.exec(`select save_activity_session('${act2}', null, '${sets}'::jsonb, '${results}'::jsonb)`));
+const again = (await as(A, () => db.query(`select (select count(*) from strength_sets where activity_id = '${act2}')::int as s, (select count(*) from workout_block_results)::int as r`))).rows[0];
+ok(again.s === 2 && again.r === 1, "reintentar el mismo guardado no duplica series ni resultados");
+
+await expectError(
+  () => as(B, () => db.exec(`select save_activity_session('${act2}', null, '[]'::jsonb, null)`)),
+  "B no puede guardar series en la actividad de A",
+);
+const afterB = (await as(A, () => db.query(`select count(*)::int as n from strength_sets where activity_id = '${act2}'`))).rows[0].n;
+ok(afterB === 2, "las series de A siguen intactas tras el intento de B");
+const otherW = (await as(A, () => db.query(`insert into workouts (client_ref, spec) values ('ref-aaaa-0004', '${spec}') returning id`))).rows[0].id;
+await expectError(
+  () => as(A, () => db.exec(`select save_activity_session('${act2}', null, null, '[{"workout_id": "${otherW}", "block_ref": "b1"}]'::jsonb)`)),
+  "no se guardan resultados de un WOD que no está vinculado a esa actividad",
+);
+const bRes = (await as(B, () => db.query(`select count(*)::int as n from workout_block_results`))).rows[0].n;
+ok(bRes === 0, "B no ve los resultados de A");
+
+console.log("Resincronización");
+// Mismo upsert que hace scripts/intervals_sync.py (merge-duplicates por user_id, source, external_id)
+await db.exec(`
+  insert into activities (user_id, source, external_id, local_date, category_auto, avg_hr, training_load, name)
+  values ('${A}', 'import', 'imp-2', '2026-10-07', 'hiit', 150, 60, 'Nombre del reloj')
+  on conflict (user_id, source, external_id) do update set avg_hr = excluded.avg_hr, training_load = excluded.training_load, name = excluded.name;
+`);
+const resync = (await db.query(`select
+  (select count(*) from strength_sets where activity_id = '${act2}')::int as s,
+  (select count(*) from workout_block_results where workout_id = '${w2}')::int as r,
+  (select rpe from activity_feedback where activity_id = '${act2}') as rpe,
+  (select activity_id from workouts where id = '${w2}') as linked,
+  (select avg_hr from activities where id = '${act2}') as hr`)).rows[0];
+ok(resync.s === 2 && resync.r === 1 && resync.rpe === 7 && resync.linked === act2, "una resincronización conserva series, resultados, notas y el vínculo del WOD");
+ok(Number(resync.hr) === 150, "y actualiza las métricas del reloj");
+
 console.log("Borrado de una actividad importada");
 await as(A, () => db.exec(`delete from activities where id = '${actA}'`));
 const orphanW = (await db.query(`select activity_id from workouts where id = '${w1.rows[0].id}'`)).rows[0];

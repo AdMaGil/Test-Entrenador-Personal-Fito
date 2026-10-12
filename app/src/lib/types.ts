@@ -140,6 +140,41 @@ export interface StrengthSet {
   item_ref?: string | null;
   /** Nombre tal como llegó al importar, si después se corrige la asociación. */
   exercise_original?: string | null;
+  /**
+   * Interpretación de la carga. NULL = sin aclarar (series antiguas): no se reinterpreta.
+   * weight_kg es la carga externa TOTAL cuando load_mode es «total» o «por_implemento».
+   */
+  load_mode?: LoadMode | null;
+  implements?: number | null;
+  load_per_implement_kg?: number | null;
+  reps_scope?: "total" | "por_lado" | null;
+  distance_m?: number | null;
+  calories?: number | null;
+}
+
+export type LoadMode = "total" | "por_implemento" | "sin_carga";
+
+/** Métricas de resultado de un bloque. NULL = desconocido. */
+export interface ResultMetrics {
+  time_s?: number | null;
+  rounds?: number | null;
+  reps?: number | null;
+  calories?: number | null;
+  distance_m?: number | null;
+}
+
+/** Lo realizado en un bloque del WOD (separado de lo previsto). status NULL = pendiente. */
+export interface BlockResult {
+  workout_id: string;
+  block_ref: string;
+  status: "realizado" | "no_realizado" | null;
+  /** En parejas: mi contribución (vacía = desconocida). En individual: mi resultado. */
+  personal: ResultMetrics;
+  /** Solo en parejas: resultado del equipo. Nunca se reparte automáticamente. */
+  team: ResultMetrics;
+  rpe: number | null;
+  adaptations: string | null;
+  notes: string | null;
 }
 
 /** WOD importado: describe el entrenamiento PREVISTO, no lo realizado. */
@@ -271,6 +306,9 @@ export interface DataBundle {
   coachMessages: CoachMessage[];
   strengthSets: StrengthEntry[];
   workouts: Workout[];
+  blockResults: BlockResult[];
+  /** false si la migración de resultados (Entrega 2) aún no está aplicada. */
+  resultsReady: boolean;
   /** false si la base de datos aún no tiene la migración de WOD aplicada (la app sigue funcionando sin esa parte). */
   wodReady: boolean;
 }

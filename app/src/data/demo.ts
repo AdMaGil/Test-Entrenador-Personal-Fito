@@ -7,7 +7,7 @@ import { makeDisplayVersion } from "../lib/photos";
 import type {
   Activity, Checkin, CoachMessage, CoachPayload, DataBundle, Feedback, Framing, Measurement, ParsedImport,
   PhotoEntry, PhotoFile, PlannedDraft, PlannedSession, Pose, Profile, Sport, StrengthEntry, StrengthSet, Streams, Wellness,
-  Workout, WorkoutDraft,
+  Workout, WorkoutDraft, BlockResult,
 } from "../lib/types";
 import { buildSession } from "../lib/coach";
 import type { Repo } from "./repo";
@@ -206,7 +206,7 @@ export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; strea
     bundle: {
       profile, activities: acts, wellness: generateWellness(today, acts), measurements: generateMeasurements(today),
       checkins, planned, feedback: {}, connection: null, syncRuns: [], photoEntries: [], coachMessages: [],
-      strengthSets, workouts: [], wodReady: true,
+      strengthSets, workouts: [], wodReady: true, blockResults: [], resultsReady: true,
     },
     streams,
     strengthByActivity,
@@ -241,6 +241,22 @@ export class DemoRepo implements Repo {
   async getStrengthSets(id: string) { return structuredClone(this.sets.get(id) ?? []); }
   async saveStrengthSets(id: string, sets: StrengthSet[]) { this.sets.set(id, structuredClone(sets).map((s, i) => ({ ...s, id: s.id ?? nid(`set${i}`) }))); }
   async saveFeedback(fb: Feedback) { this.bundle.feedback[fb.activity_id] = fb; }
+  async saveSession(activityId: string, payload: { feedback: Feedback | null; sets: StrengthSet[]; results: BlockResult[] }) {
+    // Igual que en la base de datos: todo o nada
+    const next = structuredClone(this.bundle.blockResults);
+    for (const r of payload.results) {
+      const w = this.bundle.workouts.find((x) => x.id === r.workout_id);
+      if (!w || w.activity_id !== activityId) throw new Error("Un resultado no corresponde a un WOD de esta actividad");
+      const i = next.findIndex((x) => x.workout_id === r.workout_id && x.block_ref === r.block_ref);
+      if (i >= 0) next[i] = structuredClone(r); else next.push(structuredClone(r));
+    }
+    for (const s of payload.sets) {
+      if (s.load_mode === "por_implemento" && !s.implements) throw new Error("«Por implemento» necesita el número de implementos");
+    }
+    this.bundle.blockResults = next;
+    if (payload.feedback) this.bundle.feedback[activityId] = structuredClone(payload.feedback);
+    await this.saveStrengthSets(activityId, payload.sets);
+  }
   async saveWorkout(draft: WorkoutDraft, supersede: string[] = []) {
     const existing = this.bundle.workouts.find((w) => w.client_ref === draft.client_ref);
     if (existing) return structuredClone(existing);
