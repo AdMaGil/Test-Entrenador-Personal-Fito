@@ -156,6 +156,21 @@ export function nearestMeasurement(meas: Measurement[], date: string, maxDays = 
 }
 
 // ---------------------------------------------------------------------------
+// % de grasa corporal: solo mediciones reales (hoy, únicamente las que llegan
+// de Feel Fit vía Intervals.icu; la API no expone más métricas de la báscula).
+// ---------------------------------------------------------------------------
+export function realBodyFat(meas: Measurement[]): Measurement[] {
+  return meas.filter((m) => isNum(m.body_fat_pct)).sort((a, b) => a.measured_on.localeCompare(b.measured_on));
+}
+
+export function nearestBodyFat(meas: Measurement[], date: string, maxDays = 3): Measurement | null {
+  const w = realBodyFat(meas).filter((m) => Math.abs(diffDays(m.measured_on, date)) <= maxDays);
+  if (!w.length) return null;
+  return w.reduce((best, m) =>
+    Math.abs(diffDays(m.measured_on, date)) < Math.abs(diffDays(best.measured_on, date)) ? m : best);
+}
+
+// ---------------------------------------------------------------------------
 // Recuperación: comparación con el histórico propio, sin umbrales universales
 // ---------------------------------------------------------------------------
 export interface Baseline {
