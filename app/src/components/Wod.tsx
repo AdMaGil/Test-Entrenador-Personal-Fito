@@ -40,8 +40,10 @@ export function WodItemLine({ item, showParticipant }: { item: WodItem; showPart
   );
 }
 
-export function WodBlockCard({ block, index, modality, children }: {
+export function WodBlockCard({ block, index, modality, children, itemsHidden = false }: {
   block: WodBlock; index: number; modality: WodSpec["modalidad"]; children?: ReactNode;
+  /** Los ejercicios se pintan en `children` (con su registro), no en la lista de solo lectura. */
+  itemsHidden?: boolean;
 }) {
   if (block.tipo === "descanso") {
     return (
@@ -63,7 +65,7 @@ export function WodBlockCard({ block, index, modality, children }: {
         </div>
         {structure.length > 0 && <div className="wod-structure">{structure.map((s) => <span key={s}>{s}</span>)}</div>}
       </header>
-      {block.ejercicios.length > 0 ? (
+      {itemsHidden ? null : block.ejercicios.length > 0 ? (
         <ul className="wod-items">
           {block.ejercicios.map((it) => <WodItemLine key={it.id} item={it} showParticipant={modality === "parejas" || Boolean(it.participante)} />)}
         </ul>

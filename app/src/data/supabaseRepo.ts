@@ -4,7 +4,7 @@ import { extensionOf, makeDisplayVersion } from "../lib/photos";
 import type {
   Activity, Checkin, CoachMessage, CoachPayload, DataBundle, Feedback, Framing, Measurement, ParsedImport,
   PhotoEntry, PhotoFile, PlannedDraft, PlannedSession, Pose, Profile, Sport, StrengthEntry, StrengthSet, Streams,
-  Workout, WorkoutDraft,
+  Workout, WorkoutDraft, BlockResult,
 } from "../lib/types";
 import { validateWod } from "../lib/wod";
 import type { Repo } from "./repo";
@@ -31,6 +31,7 @@ function embeddedOne<T>(v: T | T[] | null | undefined): T | null {
   return Array.isArray(v) ? v[0] ?? null : v;
 }
 
+const SET_COLUMNS_V2 = "id,activity_id,exercise,set_number,reps,weight_kg,duration_s,notes,status,workout_id,block_ref,item_ref,exercise_original,load_mode,implements,load_per_implement_kg,reps_scope,distance_m,calories";
 const SET_COLUMNS = "id,activity_id,exercise,set_number,reps,weight_kg,duration_s,notes,status,workout_id,block_ref,item_ref,exercise_original";
 const SET_COLUMNS_LEGACY = "id,activity_id,exercise,set_number,reps,weight_kg,duration_s,notes";
 
@@ -45,6 +46,8 @@ export class SupabaseRepo implements Repo {
   private urlCache = new Map<string, { url: string; exp: number }>();
   /** Se desactiva si la base de datos todavía no tiene la migración de WOD. */
   private wodReady = true;
+  /** Se desactiva si falta la migración de resultados (Entrega 2). */
+  private resultsReady = true;
 
   constructor(private sb: SupabaseClient, private userId: string) {}
 
@@ -71,6 +74,11 @@ export class SupabaseRepo implements Repo {
     const workouts = await this.sb.from("workouts").select("*").order("created_at", { ascending: true }).limit(2000);
     if (workouts.error && !isMissingSchema(workouts.error)) throw new Error(workouts.error.message);
     this.wodReady = !workouts.error;
+    const results = this.wodReady
+      ? await this.sb.from("workout_block_results").select("workout_id,block_ref,status,personal,team,rpe,adaptations,notes").limit(5000)
+      : { data: [], error: { code: "42P01", message: "sin WOD" } };
+    if (results.error && !isMissingSchema(results.error)) throw new Error(results.error.message);
+    this.resultsReady = this.wodReady && !results.error;
     const fileRows = must(files) as PhotoFile[];
     const photoEntries = (must(entries) as Omit<PhotoEntry, "files">[]).map((e) => ({
       ...e, files: fileRows.filter((f) => f.entry_id === e.id),
@@ -100,6 +108,8 @@ export class SupabaseRepo implements Repo {
       strengthSets,
       workouts: this.wodReady ? (workouts.data as Workout[]).map(hydrateWorkout) : [],
       wodReady: this.wodReady,
+      blockResults: this.resultsReady ? (results.data as BlockResult[]) : [],
+      resultsReady: this.resultsReady,
     };
   }
 
@@ -108,9 +118,11 @@ export class SupabaseRepo implements Repo {
     const q = (cols: string) => this.sb.from("strength_sets")
       .select(`${cols},activities(local_date),planned_sessions(date)`)
       .gte("created_at", since).order("created_at", { ascending: false }).limit(3000);
-    const res = await q(SET_COLUMNS);
-    if (!res.error) return res.data as unknown[];
-    if (!isMissingSchema(res.error)) throw new Error(res.error.message);
+    for (const cols of [SET_COLUMNS_V2, SET_COLUMNS]) {
+      const res = await q(cols);
+      if (!res.error) return res.data as unknown[];
+      if (!isMissingSchema(res.error)) throw new Error(res.error.message);
+    }
     return must(await q(SET_COLUMNS_LEGACY)) as unknown[];
   }
 
@@ -136,6 +148,27 @@ export class SupabaseRepo implements Repo {
         item_ref: s.item_ref ?? null, exercise_original: s.exercise_original ?? null,
       } : {}),
     }))));
+  }
+
+  async saveSession(activityId: string, payload: { feedback: Feedback | null; sets: StrengthSet[]; results: BlockResult[] }): Promise<void> {
+    if (!this.resultsReady) {
+      // Sin la migración de la Entrega 2: guardado anterior (no atómico), sin resultados por bloque
+      if (payload.feedback) await this.saveFeedback(payload.feedback);
+      await this.saveStrengthSets(activityId, payload.sets);
+      return;
+    }
+    const fb = payload.feedback ? (({ activity_id: _a, ...rest }) => { void _a; return rest; })(payload.feedback) : null;
+    const sets = payload.sets.map((s) => ({
+      exercise: s.exercise, set_number: s.set_number, reps: s.reps, weight_kg: s.weight_kg, duration_s: s.duration_s,
+      notes: s.notes, status: s.status ?? "realizado", workout_id: s.workout_id ?? null, block_ref: s.block_ref ?? null,
+      item_ref: s.item_ref ?? null, exercise_original: s.exercise_original ?? null, load_mode: s.load_mode ?? null,
+      implements: s.implements ?? null, load_per_implement_kg: s.load_per_implement_kg ?? null,
+      reps_scope: s.reps_scope ?? null, distance_m: s.distance_m ?? null, calories: s.calories ?? null,
+    }));
+    const { error } = await this.sb.rpc("save_activity_session", {
+      p_activity_id: activityId, p_feedback: fb, p_sets: sets, p_results: payload.results,
+    });
+    if (error) throw new Error(error.message);
   }
 
   private requireWod() {
