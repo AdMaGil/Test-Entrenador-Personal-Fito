@@ -5,7 +5,8 @@ import { Card, Field, OriginBadge, Segmented, Stat } from "../components/ui";
 import { useApp } from "../data/AppData";
 import { addDays, diffDays, fmtDay, rangeDays, startOfWeek } from "../lib/dates";
 import { fmtDuration, fmtNum, fmtSigned, isNum, pctChange } from "../lib/format";
-import { durationOf, fitnessSeries, inRange, previousPeriod, summarize, type Period } from "../lib/metrics";
+import { durationOf, exerciseNames, exerciseTrend, fitnessSeries, inRange, previousPeriod, summarize, type Period } from "../lib/metrics";
+import { fmtWeight } from "../lib/format";
 import { isBike, SPORT_LABEL, SPORT_SHORT, SPORTS, sportColor } from "../lib/sports";
 import type { Activity, Sport } from "../lib/types";
 
@@ -31,13 +32,16 @@ const METRICS: Record<string, { label: string; get: (a: Activity, rpe?: number |
 };
 
 export default function Evolution() {
-  const { data, today, theme } = useApp();
+  const { data, today, theme, units } = useApp();
   const t = useChartTheme();
   const [range, setRange] = useState<Range>("28");
   const [cFrom, setCFrom] = useState(addDays(today, -60));
   const [cTo, setCTo] = useState(today);
   const [sport, setSport] = useState<Sport>("hiit");
   const [metric, setMetric] = useState("avg_hr");
+  const exercises = useMemo(() => exerciseNames(data.strengthSets), [data.strengthSets]);
+  const [exercise, setExercise] = useState(exercises[0] ?? "");
+  const strengthTrend = useMemo(() => exercise ? exerciseTrend(data.strengthSets, exercise) : [], [data.strengthSets, exercise]);
 
   const period: Period = range === "custom" ? { from: cFrom, to: cTo } : { from: addDays(today, -(Number(range) - 1)), to: today };
   const prevP = previousPeriod(period);
@@ -134,6 +138,22 @@ export default function Evolution() {
                 series={[{ key: "v", label: metricDef.label, color: sportColor(sport, theme) }]} />
             ) : <p className="small muted">Hacen falta al menos dos sesiones de {SPORT_LABEL[sport]} con este dato en el periodo.</p>}
             {sport === "emtb" && <p className="chart-note">En e-MTB no se compara la velocidad ni la distancia como medida de forma: dependen de la asistencia del motor.</p>}
+          </Card>
+
+          <Card title="Fuerza: evolución por ejercicio">
+            {exercises.length ? (
+              <>
+                <select className="input" style={{ width: "auto", marginBottom: 10 }} value={exercise} onChange={(e) => setExercise(e.target.value)} aria-label="Ejercicio">
+                  {exercises.map((ex) => <option key={ex} value={ex}>{ex}</option>)}
+                </select>
+                {strengthTrend.length ? (
+                  <LineChartBox data={strengthTrend} xKey="date" ariaLabel={`Peso en ${exercise}`} xFormat={(v) => fmtDay(String(v))}
+                    yFormat={(v) => fmtWeight(v, units)}
+                    series={[{ key: "weight_kg", label: "Peso", color: t.ok }]} />
+                ) : <p className="small muted">Sin registros de peso para este ejercicio.</p>}
+                <p className="chart-note">Peso máximo registrado por sesión (de las series que anotas en el detalle de cada actividad).</p>
+              </>
+            ) : <p className="small muted">Aún no has registrado series de fuerza. Añádelas desde el detalle de una actividad (botón «Añadir serie»).</p>}
           </Card>
         </div>
 

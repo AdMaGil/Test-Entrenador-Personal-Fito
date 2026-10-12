@@ -1,6 +1,6 @@
 import { addDays, diffDays, rangeDays, startOfWeek } from "./dates";
 import { isNum, mean, stdev, sum } from "./format";
-import type { Activity, Intensity, Measurement, PlannedSession, Sport, Wellness } from "./types";
+import type { Activity, Intensity, Measurement, PlannedSession, Sport, StrengthEntry, Wellness } from "./types";
 import { SPORTS } from "./sports";
 
 export function durationOf(a: Activity): number | null {
@@ -254,6 +254,24 @@ export function similarSessions(acts: Activity[], ref: Activity, limit = 6): Act
     .filter((a) => a.id !== ref.id && a.category === ref.category && a.local_date <= ref.local_date)
     .sort((a, b) => b.local_date.localeCompare(a.local_date))
     .slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
+// Fuerza: evolución del peso máximo usado por ejercicio y sesión
+// ---------------------------------------------------------------------------
+export function exerciseNames(sets: StrengthEntry[]): string[] {
+  return [...new Set(sets.map((s) => s.exercise.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+}
+
+/** Para un ejercicio, el peso máximo registrado por fecha (una serie por día). */
+export function exerciseTrend(sets: StrengthEntry[], exercise: string): { date: string; weight_kg: number }[] {
+  const byDate = new Map<string, number>();
+  for (const s of sets) {
+    if (s.exercise.trim() !== exercise || !isNum(s.weight_kg)) continue;
+    const prev = byDate.get(s.date);
+    if (prev === undefined || s.weight_kg > prev) byDate.set(s.date, s.weight_kg);
+  }
+  return [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, weight_kg]) => ({ date, weight_kg }));
 }
 
 export function consecutiveHardDays(acts: Activity[], today: string): number {

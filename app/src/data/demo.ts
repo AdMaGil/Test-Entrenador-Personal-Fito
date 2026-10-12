@@ -6,7 +6,7 @@ import { addDays, isoWeekday, todayISO } from "../lib/dates";
 import { makeDisplayVersion } from "../lib/photos";
 import type {
   Activity, Checkin, CoachMessage, CoachPayload, DataBundle, Feedback, Framing, Measurement, ParsedImport,
-  PhotoEntry, PhotoFile, PlannedDraft, PlannedSession, Pose, Profile, Sport, StrengthSet, Streams, Wellness,
+  PhotoEntry, PhotoFile, PlannedDraft, PlannedSession, Pose, Profile, Sport, StrengthEntry, StrengthSet, Streams, Wellness,
 } from "../lib/types";
 import { buildSession } from "../lib/coach";
 import type { Repo } from "./repo";
@@ -151,7 +151,31 @@ function generateMeasurements(today: string): Measurement[] {
   return out;
 }
 
-export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; streams: Map<string, Streams> } {
+/** Progresión de ejemplo en dos ejercicios, usando los días de HIIT como fecha de referencia. */
+function generateStrengthSets(acts: Activity[]): { entries: StrengthEntry[]; byActivity: Map<string, StrengthSet[]> } {
+  const r = rng(33);
+  const hiitDays = acts.filter((a) => a.category === "hiit").sort((a, b) => a.local_date.localeCompare(b.local_date));
+  const entries: StrengthEntry[] = [];
+  const byActivity = new Map<string, StrengthSet[]>();
+  const add = (activityId: string, date: string, set: Omit<StrengthSet, "id">) => {
+    const id = nid("set");
+    entries.push({ ...set, id, date });
+    byActivity.set(activityId, [...(byActivity.get(activityId) ?? []), { ...set, id }]);
+  };
+  let squat = 62, wallBall = 7;
+  hiitDays.forEach((a, i) => {
+    if (i % 2 !== 0) return; // no todas las sesiones de HIIT incluyen fuerza registrada
+    squat += 0.6 + r() * 0.8;
+    add(a.id, a.local_date, { exercise: "Sentadilla trasera", set_number: 1, reps: 5, weight_kg: Math.round(squat * 2) / 2, duration_s: null, notes: null });
+    if (i % 4 === 0) {
+      wallBall = Math.min(9, wallBall + (r() < 0.5 ? 1 : 0));
+      add(a.id, a.local_date, { exercise: "Wall ball", set_number: 1, reps: 15, weight_kg: wallBall, duration_s: null, notes: null });
+    }
+  });
+  return { entries, byActivity };
+}
+
+export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; streams: Map<string, Streams>; strengthByActivity: Map<string, StrengthSet[]> } {
   idCounter = 0;
   const { acts, streams } = generateActivities(today);
   const profile: Profile = {
@@ -176,12 +200,15 @@ export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; strea
     if (wd === 7) push(d, "run", "suave", "propuesta", "reglas");
   }
   const checkins: Checkin[] = [{ date: addDays(today, -1), energy: 4, fatigue: 2, soreness: [], sensations: "Bien" }];
+  const { entries: strengthSets, byActivity: strengthByActivity } = generateStrengthSets(acts);
   return {
     bundle: {
       profile, activities: acts, wellness: generateWellness(today, acts), measurements: generateMeasurements(today),
       checkins, planned, feedback: {}, connection: null, syncRuns: [], photoEntries: [], coachMessages: [],
+      strengthSets,
     },
     streams,
+    strengthByActivity,
   };
 }
 
@@ -196,6 +223,7 @@ export class DemoRepo implements Repo {
     const g = buildDemoBundle();
     this.bundle = g.bundle;
     this.streams = g.streams;
+    this.sets = g.strengthByActivity;
   }
 
   async loadAll(): Promise<DataBundle> {

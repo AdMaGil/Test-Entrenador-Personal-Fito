@@ -3,7 +3,7 @@ import { addDays, todayISO } from "../lib/dates";
 import { extensionOf, makeDisplayVersion } from "../lib/photos";
 import type {
   Activity, Checkin, CoachMessage, CoachPayload, DataBundle, Feedback, Framing, Measurement, ParsedImport,
-  PhotoEntry, PhotoFile, PlannedDraft, PlannedSession, Pose, Profile, Sport, StrengthSet, Streams,
+  PhotoEntry, PhotoFile, PlannedDraft, PlannedSession, Pose, Profile, Sport, StrengthEntry, StrengthSet, Streams,
 } from "../lib/types";
 import type { Repo } from "./repo";
 
@@ -24,7 +24,7 @@ export class SupabaseRepo implements Repo {
 
   async loadAll(): Promise<DataBundle> {
     const since = addDays(todayISO(), -HISTORY_DAYS);
-    const [profile, acts, well, meas, chk, plan, fb, conn, runs, entries, files, msgs] = await Promise.all([
+    const [profile, acts, well, meas, chk, plan, fb, conn, runs, entries, files, msgs, strength] = await Promise.all([
       this.sb.from("profiles").select("*").eq("user_id", this.userId).maybeSingle(),
       this.sb.from("activities")
         .select("id,source,external_id,data_origin,start_time,local_date,name,source_type,category_auto,category_ambiguous,category_override,category,category_needs_review,duration_s,moving_time_s,distance_m,elevation_gain_m,avg_hr,max_hr,avg_speed_ms,max_speed_ms,avg_cadence,rider_avg_power_w,rider_power_source,training_load,intensity,trimp,calories,hr_zone_times_s,hr_zone_bounds,device_name,has_gps,has_heartrate,stream_types,api_restricted,last_synced_at,created_at")
@@ -40,6 +40,9 @@ export class SupabaseRepo implements Repo {
       this.sb.from("photo_entries").select("*").order("taken_on", { ascending: false }),
       this.sb.from("photo_files").select("*"),
       this.sb.from("coach_messages").select("*").order("created_at").limit(200),
+      this.sb.from("strength_sets")
+        .select("id,exercise,set_number,reps,weight_kg,duration_s,notes,activities(local_date),planned_sessions(date)")
+        .gte("created_at", since).order("created_at", { ascending: false }).limit(3000),
     ]);
     const fileRows = must(files) as PhotoFile[];
     const photoEntries = (must(entries) as Omit<PhotoEntry, "files">[]).map((e) => ({
@@ -47,6 +50,10 @@ export class SupabaseRepo implements Repo {
     }));
     const feedback: Record<string, Feedback> = {};
     for (const f of must(fb) as Feedback[]) feedback[f.activity_id] = f;
+    type StrengthRow = StrengthSet & { id: string; activities: { local_date: string }[] | null; planned_sessions: { date: string }[] | null };
+    const strengthSets = (must(strength) as unknown as StrengthRow[])
+      .map(({ activities, planned_sessions, ...s }) => ({ ...s, date: activities?.[0]?.local_date ?? planned_sessions?.[0]?.date ?? null }))
+      .filter((s): s is StrengthEntry => s.date !== null);
     return {
       profile: must(profile) as Profile | null,
       activities: must(acts) as Activity[],
@@ -59,6 +66,7 @@ export class SupabaseRepo implements Repo {
       syncRuns: must(runs) as DataBundle["syncRuns"],
       photoEntries,
       coachMessages: must(msgs) as CoachMessage[],
+      strengthSets,
     };
   }
 
