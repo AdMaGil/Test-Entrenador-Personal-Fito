@@ -183,28 +183,6 @@ await expectError(
   "el usuario no puede insertar ejecuciones de sincronización",
 );
 
-// --- Fotos ---------------------------------------------------------------
-console.log("Almacenamiento de fotos");
-const bucket = (await db.query(`select public from storage.buckets where id = 'progress-photos'`)).rows[0];
-ok(bucket && bucket.public === false, "el bucket de fotos es privado");
-await as(A, () => db.exec(`insert into storage.objects (bucket_id, name) values ('progress-photos', '${A}/e1/frontal-original.jpg')`));
-ok(true, "A sube a su carpeta");
-await expectError(
-  () => as(A, () => db.exec(`insert into storage.objects (bucket_id, name) values ('progress-photos', '${B}/e1/frontal-original.jpg')`)),
-  "A no puede subir a la carpeta de B",
-);
-const bObj = await as(B, () => db.query(`select count(*)::int as n from storage.objects`));
-ok(bObj.rows[0].n === 0, "B no ve las fotos de A");
-const bDel = await as(B, () => db.query(`delete from storage.objects returning id`));
-ok(bDel.rows.length === 0, "B no puede borrar las fotos de A");
-
-const entry = await as(A, () => db.query(`insert into photo_entries (taken_on) values ('2026-10-11') returning id`));
-const eid = entry.rows[0].id;
-await as(A, () => db.exec(`insert into photo_files (entry_id, pose, original_path) values ('${eid}', 'frontal', '${A}/${eid}/frontal-original.jpg')`));
-await as(A, () => db.exec(`delete from photo_entries where id = '${eid}'`));
-const orphan = await db.query(`select count(*)::int as n from photo_files where entry_id = '${eid}'`);
-ok(orphan.rows[0].n === 0, "borrar un registro elimina sus filas de archivos");
-
 console.log("Importación de Feelfit");
 await as(A, () => db.exec(`
   insert into body_measurements (source, external_id, measured_on, measured_at, weight_kg, body_fat_pct, muscle_mass_kg, visceral_fat, bmr_kcal, metabolic_age, data_origin)
@@ -226,6 +204,28 @@ await expectError(
 );
 const bFF = (await as(B, () => db.query(`select count(*)::int as n from body_measurements where source = 'feelfit'`))).rows[0].n;
 ok(bFF === 0, "B no ve las mediciones de Feelfit de A");
+
+// --- Fotos ---------------------------------------------------------------
+console.log("Almacenamiento de fotos");
+const bucket = (await db.query(`select public from storage.buckets where id = 'progress-photos'`)).rows[0];
+ok(bucket && bucket.public === false, "el bucket de fotos es privado");
+await as(A, () => db.exec(`insert into storage.objects (bucket_id, name) values ('progress-photos', '${A}/e1/frontal-original.jpg')`));
+ok(true, "A sube a su carpeta");
+await expectError(
+  () => as(A, () => db.exec(`insert into storage.objects (bucket_id, name) values ('progress-photos', '${B}/e1/frontal-original.jpg')`)),
+  "A no puede subir a la carpeta de B",
+);
+const bObj = await as(B, () => db.query(`select count(*)::int as n from storage.objects`));
+ok(bObj.rows[0].n === 0, "B no ve las fotos de A");
+const bDel = await as(B, () => db.query(`delete from storage.objects returning id`));
+ok(bDel.rows.length === 0, "B no puede borrar las fotos de A");
+
+const entry = await as(A, () => db.query(`insert into photo_entries (taken_on) values ('2026-10-11') returning id`));
+const eid = entry.rows[0].id;
+await as(A, () => db.exec(`insert into photo_files (entry_id, pose, original_path) values ('${eid}', 'frontal', '${A}/${eid}/frontal-original.jpg')`));
+await as(A, () => db.exec(`delete from photo_entries where id = '${eid}'`));
+const orphan = await db.query(`select count(*)::int as n from photo_files where entry_id = '${eid}'`);
+ok(orphan.rows[0].n === 0, "borrar un registro elimina sus filas de archivos");
 
 console.log(`\n${passed} correctas, ${failed} fallidas`);
 process.exit(failed ? 1 : 0);
