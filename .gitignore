@@ -2,6 +2,7 @@ node_modules/
 dist/
 web/config.js
 app/.env.local
+app/tsconfig.tsbuildinfo
 __pycache__/
 *.pyc
 .env
