@@ -148,6 +148,18 @@ export class SupabaseRepo implements Repo {
     must(await this.sb.from("body_measurements").insert({ ...m, external_id: null }));
   }
 
+  async importMeasurements(rows: Omit<Measurement, "id" | "last_synced_at">[]): Promise<number> {
+    let inserted = 0;
+    for (let i = 0; i < rows.length; i += 200) {
+      const res = await this.sb.from("body_measurements")
+        .upsert(rows.slice(i, i + 200), { onConflict: "user_id,source,external_id", ignoreDuplicates: true })
+        .select("id");
+      if (res.error) throw new Error(res.error.message);
+      inserted += (res.data ?? []).length;
+    }
+    return inserted;
+  }
+
   async deleteMeasurement(id: string): Promise<void> {
     must(await this.sb.from("body_measurements").delete().eq("id", id).eq("source", "manual"));
   }

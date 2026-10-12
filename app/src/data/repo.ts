@@ -25,6 +25,8 @@ export interface Repo {
   deletePlanned(id: string): Promise<void>;
 
   addMeasurement(m: Omit<Measurement, "id" | "last_synced_at">): Promise<void>;
+  /** Importa mediciones de Feelfit. Idempotente por external_id: reimportar no duplica. Devuelve las insertadas. */
+  importMeasurements(rows: Omit<Measurement, "id" | "last_synced_at">[]): Promise<number>;
   deleteMeasurement(id: string): Promise<void>;
 
   saveProfile(p: Partial<Profile>): Promise<void>;

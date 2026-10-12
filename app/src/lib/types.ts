@@ -82,14 +82,28 @@ export interface Wellness {
 
 export interface Measurement {
   id: string;
-  source: "intervals" | "manual";
+  source: "intervals" | "manual" | "feelfit";
+  external_id?: string | null;
   measured_on: string;
+  measured_at?: string | null;
   weight_kg: number | null;
   body_fat_pct: number | null;
   waist_cm: number | null;
   data_origin: "medido" | "manual";
   notes: string | null;
   last_synced_at: string | null;
+  // Composición estimada por la báscula (bioimpedancia). NULL = sin dato.
+  bmi?: number | null;
+  muscle_mass_kg?: number | null;
+  skeletal_muscle_pct?: number | null;
+  fat_free_mass_kg?: number | null;
+  subcutaneous_fat_pct?: number | null;
+  visceral_fat?: number | null;
+  body_water_pct?: number | null;
+  bone_mass_kg?: number | null;
+  protein_pct?: number | null;
+  bmr_kcal?: number | null;
+  metabolic_age?: number | null;
 }
 
 export interface Checkin {
