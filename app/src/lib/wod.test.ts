@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 // Los ejemplos de la documentación se validan aquí para que nunca dejen de ser compatibles
 import ejemploA from "../../../docs/wod/ejemplo-a-hyrox.json";
 import ejemploB from "../../../docs/wod/ejemplo-b-hyrox-parejas.json";
+import formatoDoc from "../../../docs/wod-formato.md?raw";
 import { describeLoad, describeTarget, parseLegacyTable, parseWodInput, validateWod, wodTags } from "./wod";
 
 const casoA = JSON.stringify(ejemploA, null, 2);
@@ -44,7 +45,7 @@ describe("ejemplos documentados", () => {
     expect(wod.modalidad).toBe("parejas");
     expect(wod.bloques.map((b) => b.tipo)).toEqual(["emom", "for_time", "descanso", "emom", "for_time", "descanso", "emom", "for_time"]);
     expect(wod.bloques[0].duracion_s).toBe(360);
-    expect(wod.bloques[0].ejercicios[0]).toMatchObject({ participante: "A", objetivo: { tipo: "max_calorias", valor: null } });
+    expect(wod.bloques[0].ejercicios[0]).toMatchObject({ etiqueta: "A", objetivo: { tipo: "max_calorias", valor: null } });
     const devil = wod.bloques[1].ejercicios[1];
     expect(devil.carga).toEqual({ texto: "2 DB", kg: null, implementos: 2, modo: "por_implemento" });
     expect(wod.bloques[1].limite_tiempo_s).toBeNull();
@@ -128,10 +129,10 @@ describe("validación y datos desconocidos", () => {
     expect(new Set(v.wod.bloques[0].ejercicios.map((e) => e.id)).size).toBe(2);
   });
 
-  it("descarta una fecha con formato inválido conservándola para revisión", () => {
+  it("una fecha en otro formato no se interpreta: queda como texto visible", () => {
     const v = validateWod({ fecha: "12/10/2026", bloques: [{ tipo: "amrap" }] });
     expect(v.ok && v.wod.fecha).toBeNull();
-    expect(v.ok && v.wod.no_reconocido.some((u) => u.ruta === "fecha")).toBe(true);
+    expect(v.ok && v.wod.fecha_texto).toBe("12/10/2026");
   });
 
   it("el contenido se trata como datos: no se ejecuta ni se transforma", () => {
@@ -193,5 +194,90 @@ describe("presentación", () => {
   it("describe dos mancuernas como «2 × 15 kg»", () => {
     expect(describeLoad({ texto: null, kg: 15, implementos: 2, modo: "por_implemento" })).toBe("2 × 15 kg");
     expect(describeLoad({ texto: "2 DB", kg: null, implementos: 2, modo: "por_implemento" })).toBe("2 implementos · peso sin indicar");
+  });
+});
+
+describe("contrato: documento, prompt y validador coinciden", () => {
+  const plantilla = (() => {
+    const i = formatoDoc.indexOf("=== PLANTILLA");
+    const j = formatoDoc.indexOf("=== FIN DE LA PLANTILLA ===");
+    const body = formatoDoc.slice(formatoDoc.indexOf("\n", i) + 1, j);
+    return JSON.parse(body);
+  })();
+
+  it("la plantilla del prompt es JSON válido y el validador la acepta sin datos no reconocidos", () => {
+    const v = validateWod(plantilla);
+    expect(v.ok).toBe(true);
+    if (v.ok) expect(v.wod.no_reconocido).toEqual([]);
+  });
+
+  it("la plantilla no contiene valores con «|» (las opciones van aparte)", () => {
+    expect(JSON.stringify(plantilla)).not.toMatch(/\|/);
+  });
+
+  it("todas las claves de la plantilla son las que lee el validador", () => {
+    const keys = (o: Record<string, unknown>) => Object.keys(o).sort();
+    expect(keys(plantilla)).toEqual(["ambiguedades", "bloques", "calentamiento", "fecha", "fecha_texto", "formato", "modalidad", "nombre", "notas", "resumen_enfoque", "transcripcion", "version"]);
+    expect(keys(plantilla.bloques[0].ejercicios[0])).toEqual(["alternativas", "carga", "equipamiento", "etiqueta", "id", "nombre", "notas", "objetivo"]);
+  });
+
+  it("los ejemplos usan solo claves del contrato", () => {
+    for (const ej of [ejemploA, ejemploB]) {
+      const v = validateWod(ej);
+      expect(v.ok && v.wod.no_reconocido).toEqual([]);
+    }
+  });
+});
+
+describe("reglas cerradas del formato", () => {
+  it("un registro = un WOD: rechaza una lista de WOD", () => {
+    const r = parseWodInput(JSON.stringify([ejemploA, ejemploB]));
+    expect(r.kind).toBe("error");
+    if (r.kind === "error") expect(r.errors[0]).toMatch(/2 WOD/);
+  });
+
+  it("un registro = un WOD: rechaza varios bloques JSON en el mismo texto", () => {
+    const r = parseWodInput("```json\n" + casoA + "\n```\n\n```json\n" + casoB + "\n```");
+    expect(r.kind).toBe("error");
+    if (r.kind === "error") expect(r.errors[0]).toMatch(/2 bloques JSON/);
+  });
+
+  it("si falta el año, conserva la fecha visible y no la completa", () => {
+    const v = validateWod({ fecha: "12/10", bloques: [{ tipo: "amrap" }] });
+    expect(v.ok && v.wod.fecha).toBeNull();
+    expect(v.ok && v.wod.fecha_texto).toBe("12/10");
+    const w = validateWod({ fecha: null, fecha_texto: "lunes 12", bloques: [{ tipo: "amrap" }] });
+    expect(w.ok && [w.wod.fecha, w.wod.fecha_texto]).toEqual([null, "lunes 12"]);
+  });
+
+  it("A/B es una etiqueta (estación o ejercicio); acepta el nombre antiguo «participante»", () => {
+    const v = validateWod({ bloques: [{ tipo: "emom", ejercicios: [{ nombre: "Remo", etiqueta: "A" }, { nombre: "Air squat", participante: "B" }] }] });
+    expect(v.ok && v.wod.bloques[0].ejercicios.map((e) => e.etiqueta)).toEqual(["A", "B"]);
+    expect(v.ok && v.wod.no_reconocido).toEqual([]);
+  });
+
+  it("los identificadores son únicos en todo el WOD (bloques, ejercicios y calentamiento)", () => {
+    const v = validateWod({
+      calentamiento: { ejercicios: [{ id: "x", nombre: "Remo" }] },
+      bloques: [{ id: "x", tipo: "emom", ejercicios: [{ id: "x", nombre: "A" }] }],
+    });
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    const ids = [...v.wod.bloques.map((b) => b.id), ...v.wod.bloques.flatMap((b) => b.ejercicios.map((e) => e.id)), ...(v.wod.calentamiento?.ejercicios.map((e) => e.id) ?? [])];
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("los resultados nunca se infieren: lo que parezca un resultado queda sin importar y avisa", () => {
+    const v = validateWod({ bloques: [{ tipo: "for_time", resultado: "12:30", ejercicios: [{ nombre: "Thruster", tiempo_final: 300 }] }] });
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(v.wod.no_reconocido.map((u) => u.ruta)).toEqual(expect.arrayContaining(["bloques[0].resultado", "bloques[0].ejercicios[0].tiempo_final"]));
+    expect(v.warnings.some((w) => /resultados/.test(w))).toBe(true);
+  });
+
+  it("un valor de opciones copiado literalmente («emom | amrap») no se acepta como tipo", () => {
+    const v = validateWod({ bloques: [{ tipo: "emom | amrap | for_time" }] });
+    expect(v.ok && v.wod.bloques[0].tipo).toBe("otro");
+    expect(v.ok && v.warnings.some((w) => /«\|»/.test(w))).toBe(true);
   });
 });

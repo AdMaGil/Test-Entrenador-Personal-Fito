@@ -18,13 +18,13 @@ export function ModalityBadge({ modality }: { modality: WodSpec["modalidad"] }) 
   return <span className="badge muted-badge">Modalidad sin indicar</span>;
 }
 
-export function WodItemLine({ item, showParticipant }: { item: WodItem; showParticipant: boolean }) {
+export function WodItemLine({ item, showLabel }: { item: WodItem; showLabel: boolean }) {
   const target = describeTarget(item.objetivo);
   const load = describeLoad(item.carga);
   return (
     <li className="wod-item">
       <div className="wod-item-main">
-        {showParticipant && item.participante && <span className="who" title="Etiqueta del WOD; no indica quién lo hace">{item.participante}</span>}
+        {showLabel && item.etiqueta && <span className="who" title="Etiqueta del WOD (estación o ejercicio); no indica personas ni reparto">{item.etiqueta}</span>}
         <span className="name">{item.nombre}</span>
         {target && <span className="target num">{target}</span>}
       </div>
@@ -67,7 +67,7 @@ export function WodBlockCard({ block, index, modality, children, itemsHidden = f
       </header>
       {itemsHidden ? null : block.ejercicios.length > 0 ? (
         <ul className="wod-items">
-          {block.ejercicios.map((it) => <WodItemLine key={it.id} item={it} showParticipant={modality === "parejas" || Boolean(it.participante)} />)}
+          {block.ejercicios.map((it) => <WodItemLine key={it.id} item={it} showLabel />)}
         </ul>
       ) : <p className="small muted">Sin ejercicios indicados.</p>}
       {(block.rpe?.length || block.descanso || block.notas) && (
@@ -100,7 +100,7 @@ export function WodExtras({ wod, position }: { wod: WodSpec; position: "before" 
           <details className="disclosure">
             <summary><Icon name="chevron" className="ico chev" />Calentamiento{wod.calentamiento.rondas ? ` · ${wod.calentamiento.rondas} rondas` : ""}</summary>
             <ul className="wod-items">
-              {wod.calentamiento.ejercicios.map((it) => <WodItemLine key={it.id} item={it} showParticipant={false} />)}
+              {wod.calentamiento.ejercicios.map((it) => <WodItemLine key={it.id} item={it} showLabel />)}
             </ul>
             {wod.calentamiento.notas && <p className="small ink2" style={{ marginBottom: 10 }}>{wod.calentamiento.notas}</p>}
           </details>
@@ -137,7 +137,8 @@ export function WodSummaryLine({ wod }: { wod: WodSpec }) {
   return (
     <div className="row" style={{ gap: 6 }}>
       <ModalityBadge modality={wod.modalidad} />
-      {wod.fecha && <span className="badge">{fmtDayLong(wod.fecha)}</span>}
+      {wod.fecha ? <span className="badge">{fmtDayLong(wod.fecha)}</span>
+        : wod.fecha_texto ? <span className="badge" title="Fecha visible en la captura; el año no se ha determinado">{wod.fecha_texto} · año sin determinar</span> : null}
       <span className="small muted">{wod.bloques.filter((b) => b.tipo !== "descanso").length} bloque(s)</span>
     </div>
   );
@@ -190,6 +191,7 @@ export function WodEditor({ value, onChange }: { value: WodSpec; onChange: (w: W
         <div className="field">
           <label htmlFor="wod-date">Fecha del WOD</label>
           <input id="wod-date" className="input" type="date" value={value.fecha ?? ""} onChange={(e) => onChange({ ...value, fecha: e.target.value || null })} />
+          {!value.fecha && value.fecha_texto && <span className="hint">En la captura: «{value.fecha_texto}». El año no se completa solo.</span>}
         </div>
         <div className="field">
           <label htmlFor="wod-mod">Modalidad</label>
@@ -294,7 +296,7 @@ export function WodEditor({ value, onChange }: { value: WodSpec; onChange: (w: W
               ))}
               <div>
                 <button type="button" className="btn sm" onClick={() => setBlock(bi, { ejercicios: [...b.ejercicios, {
-                  id: uniqueItemId(value), nombre: "", participante: null, objetivo: null, carga: null, equipamiento: null, alternativas: null, notas: null,
+                  id: uniqueItemId(value), nombre: "", etiqueta: null, objetivo: null, carga: null, equipamiento: null, alternativas: null, notas: null,
                 }] })}><Icon name="plus" />Añadir ejercicio</button>
               </div>
             </div>

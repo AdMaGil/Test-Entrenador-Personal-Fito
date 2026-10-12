@@ -489,7 +489,7 @@ export default function ActivityDetail() {
                           <>
                             {b.ejercicios.map((it) => (
                               <ExerciseLog key={it.id} item={it} sets={setsOf(w, it)}
-                                title={<>{w.spec.modalidad === "parejas" && it.participante && <span className="who">{it.participante}</span>}{nameFor(w, it)}</>}
+                                title={<>{it.etiqueta && <span className="who" title="Etiqueta del WOD (estación o ejercicio)">{it.etiqueta}</span>}{nameFor(w, it)}</>}
                                 header={setsOf(w, it).length > 0 ? <AssocEditor original={it.nombre} current={nameFor(w, it)} catalog={catalog} onChange={(n) => associate(w, it, n)} /> : null}
                                 reference={<LastTimeRef exercise={nameFor(w, it)} a={a} />}
                                 onAdd={() => addSetFor(w, b.id, it)} onChangeSet={patchSet} onDuplicate={duplicate} onRemove={removeSet} />
