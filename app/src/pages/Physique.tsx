@@ -6,7 +6,7 @@ import { Card, Empty, Field, Modal, OriginBadge, Segmented } from "../components
 import { useApp } from "../data/AppData";
 import { addDays, diffDays, fmtDay, fmtDayLong, startOfWeek } from "../lib/dates";
 import { fmtNum, fmtWeight, isNum } from "../lib/format";
-import { inRange, nearestMeasurement, realWeights, summarize } from "../lib/metrics";
+import { inRange, nearestBodyFat, nearestMeasurement, realBodyFat, realWeights, summarize } from "../lib/metrics";
 import { PHOTO_GUIDE, POSE_LABEL, POSES } from "../lib/photos";
 import type { Framing, PhotoEntry, PhotoFile, Pose } from "../lib/types";
 
@@ -92,6 +92,7 @@ function EntryEditor({ entry, onClose }: { entry: PhotoEntry | null; onClose: ()
   useEffect(() => { if (current) setCurrent(data.photoEntries.find((e) => e.id === current.id) ?? current); }, [data.photoEntries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nearest = nearestMeasurement(data.measurements, date, 3);
+  const nearestFat = nearestBodyFat(data.measurements, date, 3);
   const fields = () => ({
     taken_on: date, waist_cm: waist ? Number(waist) : null, notes: notes || null,
     weight_is_manual: useManual,
@@ -141,6 +142,9 @@ function EntryEditor({ entry, onClose }: { entry: PhotoEntry | null; onClose: ()
               : <div className="input" style={{ display: "flex", alignItems: "center" }}>{nearest ? fmtWeight(nearest.weight_kg, units) : "Sin datos"}</div>}
           </Field>
           <Field label="Corrección"><label className="row small" style={{ minHeight: 36 }}><input type="checkbox" checked={useManual} onChange={(e) => setUseManual(e.target.checked)} />Usar un peso manual</label></Field>
+          <Field label="Grasa corporal" hint={nearestFat ? `Medición real más cercana: ${fmtDay(nearestFat.measured_on)}${nearestFat.measured_on !== date ? `, a ${Math.abs(diffDays(nearestFat.measured_on, date))} día(s)` : ""}` : "No hay medición de grasa a ±3 días (no se puede introducir a mano: solo llega sincronizada desde Feel Fit)"}>
+            <div className="input" style={{ display: "flex", alignItems: "center" }}>{nearestFat ? `${fmtNum(nearestFat.body_fat_pct, 1)} %` : "Sin datos"}</div>
+          </Field>
           <Field label="Notas" full><input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ej.: en ayunas, misma luz que la última vez" /></Field>
         </div>
         <div className="photo-grid">
@@ -234,6 +238,7 @@ function Trends({ entries }: { entries: PhotoEntry[] }) {
   const t = useChartTheme();
   const from = entries.length ? addDays([...entries].sort((a, b) => a.taken_on.localeCompare(b.taken_on))[0].taken_on, -14) : addDays(today, -90);
   const weights = realWeights(data.measurements).filter((m) => m.measured_on >= from).map((m) => ({ x: m.measured_on, peso: m.weight_kg }));
+  const fat = realBodyFat(data.measurements).filter((m) => m.measured_on >= from).map((m) => ({ x: m.measured_on, grasa: m.body_fat_pct }));
   const waist = [
     ...data.measurements.filter((m) => isNum(m.waist_cm)).map((m) => ({ x: m.measured_on, cintura: m.waist_cm })),
     ...entries.filter((e) => isNum(e.waist_cm)).map((e) => ({ x: e.taken_on, cintura: e.waist_cm })),
@@ -245,10 +250,13 @@ function Trends({ entries }: { entries: PhotoEntry[] }) {
   const marks = entries.map((e) => fmtDay(e.taken_on)).join(", ");
   void theme;
   return (
-    <div className="grid cols-3">
+    <div className="grid cols-4">
       <div><h3 style={{ marginBottom: 6 }}>Peso (mediciones reales)</h3>
         {weights.length ? <LineChartBox data={weights} xKey="x" height={160} ariaLabel="Peso" xFormat={(v) => fmtDay(String(v))} yFormat={(v) => fmtNum(v, 1)}
           series={[{ key: "peso", label: "Peso", color: t.ink }]} /> : <p className="small muted">Sin datos</p>}</div>
+      <div><h3 style={{ marginBottom: 6 }}>Grasa corporal (%)</h3>
+        {fat.length ? <LineChartBox data={fat} xKey="x" height={160} ariaLabel="Grasa corporal" xFormat={(v) => fmtDay(String(v))} yFormat={(v) => `${fmtNum(v, 1)} %`}
+          series={[{ key: "grasa", label: "Grasa", color: t.crit }]} /> : <p className="small muted">Sin datos de grasa corporal</p>}</div>
       <div><h3 style={{ marginBottom: 6 }}>Cintura (cm)</h3>
         {waist.length ? <LineChartBox data={waist} xKey="x" height={160} ariaLabel="Cintura" xFormat={(v) => fmtDay(String(v))} yFormat={(v) => fmtNum(v, 1)}
           series={[{ key: "cintura", label: "Cintura", color: t.warn }]} /> : <p className="small muted">Sin datos de cintura</p>}</div>
@@ -265,6 +273,7 @@ export default function Physique() {
   const [editing, setEditing] = useState<PhotoEntry | null | "new">(null);
   const [tab, setTab] = useState<"cronologia" | "comparar" | "tendencias">("cronologia");
   const entries = useMemo(() => [...data.photoEntries].sort((a, b) => b.taken_on.localeCompare(a.taken_on)), [data.photoEntries]);
+  const fatFor = (date: string) => nearestBodyFat(data.measurements, date, 3);
 
   return (
     <>
@@ -298,6 +307,8 @@ export default function Physique() {
                 <div className="row small ink2">
                   <span>Peso: {isNum(e.weight_kg) ? fmtWeight(e.weight_kg, units) : "Sin datos"}</span>
                   {isNum(e.weight_kg) && <OriginBadge origin={e.weight_is_manual ? "manual" : "medido"} />}
+                  <span>Grasa: {isNum(fatFor(e.taken_on)?.body_fat_pct) ? `${fmtNum(fatFor(e.taken_on)!.body_fat_pct, 1)} %` : "Sin datos"}</span>
+                  {isNum(fatFor(e.taken_on)?.body_fat_pct) && <OriginBadge origin="medido" />}
                   <span>Cintura: {isNum(e.waist_cm) ? `${fmtNum(e.waist_cm, 1)} cm` : "Sin datos"}</span>
                   {e.notes && <span className="muted">· {e.notes}</span>}
                 </div>
