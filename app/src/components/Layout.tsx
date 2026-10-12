@@ -1,17 +1,19 @@
 import { useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { coachAiEnabled } from "../data/supabaseClient";
 import { useApp } from "../data/AppData";
 import { fmtDateTime, relativeFromNow } from "../lib/dates";
 import { Icon, type IconName } from "./icons";
 import { StatusLine } from "./ui";
 
+// Nombres pensados para no solaparse: "Entrenamiento" (carga, fuerza, sesiones) vs. "Físico" (peso, grasa, fotos).
 const NAV: { to: string; label: string; icon: IconName; mobile?: boolean }[] = [
   { to: "/hoy", label: "Hoy", icon: "today", mobile: true },
   { to: "/calendario", label: "Calendario", icon: "calendar", mobile: true },
   { to: "/actividades", label: "Actividades", icon: "list", mobile: true },
-  { to: "/evolucion", label: "Evolución", icon: "chart" },
+  { to: "/evolucion", label: "Entrenamiento", icon: "chart" },
   { to: "/salud", label: "Salud y recuperación", icon: "heart", mobile: true },
-  { to: "/fisico", label: "Evolución física", icon: "camera" },
+  { to: "/fisico", label: "Físico", icon: "camera" },
   { to: "/entrenador", label: "Mi entrenador", icon: "coach" },
   { to: "/ajustes", label: "Ajustes", icon: "settings" },
 ];
@@ -62,6 +64,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} className={({ isActive }) => (isActive ? "active" : "")}>
               <Icon name={n.icon} />{n.label}
+              {n.to === "/entrenador" && !coachAiEnabled && <span className="tiny muted" style={{ marginLeft: "auto" }}>reglas</span>}
             </NavLink>
           ))}
         </nav>
@@ -99,6 +102,7 @@ export function Layout({ children }: { children: ReactNode }) {
             {NAV.filter((n) => !n.mobile).map((n) => (
               <NavLink key={n.to} to={n.to} onClick={() => setMoreOpen(false)} className={({ isActive }) => (isActive ? "active" : "")}>
                 <Icon name={n.icon} />{n.label}
+                {n.to === "/entrenador" && !coachAiEnabled && <span className="tiny muted" style={{ marginLeft: "auto" }}>reglas</span>}
               </NavLink>
             ))}
           </nav>
