@@ -233,7 +233,7 @@ export class DemoRepo implements Repo {
     const strengthSets: StrengthEntry[] = [];
     for (const [actId, sets] of this.sets) {
       const date = dateOf.get(actId);
-      if (date) sets.forEach((s, i) => strengthSets.push({ ...s, id: s.id ?? `${actId}-${i}`, date }));
+      if (date) sets.forEach((s, i) => strengthSets.push({ ...s, id: s.id ?? `${actId}-${i}`, date, activity_id: actId }));
     }
     return structuredClone({ ...this.bundle, strengthSets });
   }

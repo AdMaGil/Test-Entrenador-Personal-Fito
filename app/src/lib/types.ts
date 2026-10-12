@@ -198,6 +198,7 @@ export type WorkoutDraft = Pick<Workout, "client_ref" | "activity_id" | "planned
 export interface StrengthEntry extends StrengthSet {
   id: string;
   date: string;
+  activity_id?: string | null;
 }
 
 export interface Units {

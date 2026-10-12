@@ -10,6 +10,7 @@ import { addDays, fmtDayLong } from "../lib/dates";
 import { fmtDistance, fmtDuration, fmtElevation, fmtHr } from "../lib/format";
 import { parseActivityFile } from "../lib/importers";
 import { durationOf, intensityBucket } from "../lib/metrics";
+import { activityPending, activityWodInfo, describePending, hasPending } from "../lib/pending";
 import { SPORT_DESCRIPTION, SPORT_LABEL, SPORTS } from "../lib/sports";
 import type { Intensity, ParsedImport, Sport } from "../lib/types";
 
@@ -104,12 +105,23 @@ export default function Activities() {
   const [intensity, setIntensity] = useState<Intensity | "todas" | "sin">("todas");
   const [importing, setImporting] = useState(false);
   const [pastingWod, setPastingWod] = useState(false);
+  const [onlyPending, setOnlyPending] = useState(false);
+  const info = useMemo(() => {
+    const m = new Map<string, { title: string | null; tags: string[]; pending: string | null }>();
+    for (const a of data.activities) {
+      const w = activityWodInfo(data, a.id);
+      const p = activityPending(data, a.id);
+      m.set(a.id, { ...w, pending: hasPending(p) ? describePending(p) : null });
+    }
+    return m;
+  }, [data]);
   const nav = useNavigate();
 
   const list = useMemo(() => data.activities
     .filter((a) => a.local_date >= from && a.local_date <= to)
     .filter((a) => sport === "todos" || a.category === sport)
-    .filter((a) => !q || (a.name ?? "").toLowerCase().includes(q.toLowerCase()))
+    .filter((a) => !q || `${a.name ?? ""} ${info.get(a.id)?.title ?? ""}`.toLowerCase().includes(q.toLowerCase()))
+    .filter((a) => !onlyPending || Boolean(info.get(a.id)?.pending))
     .filter((a) => {
       const m = (durationOf(a) ?? 0) / 60;
       return (!minMin || m >= Number(minMin)) && (!maxMin || m <= Number(maxMin));
@@ -120,12 +132,13 @@ export default function Activities() {
       return intensity === "sin" ? b === null : b === intensity;
     })
     .sort((a, b) => b.local_date.localeCompare(a.local_date) || (b.start_time ?? "").localeCompare(a.start_time ?? "")),
-  [data.activities, from, to, sport, q, minMin, maxMin, intensity]);
+  [data.activities, from, to, sport, q, minMin, maxMin, intensity, onlyPending, info]);
 
   const review = data.activities.filter((a) => a.category_needs_review);
 
   return (
     <>
+      <div className="touch">
       <PageHead title="Actividades" sub={`${list.length} de ${data.activities.length} actividades`}
         actions={<>
           <button className="btn primary" onClick={() => setPastingWod(true)}><Icon name="plus" />Pegar WOD</button>
@@ -140,7 +153,7 @@ export default function Activities() {
 
       <Card className="" pad>
         <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-          <Field label="Buscar"><input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre…" /></Field>
+          <Field label="Buscar"><input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre o WOD…" /></Field>
           <Field label="Deporte">
             <select className="input" value={sport} onChange={(e) => setSport(e.target.value as Sport | "todos")}>
               <option value="todos">Todos</option>
@@ -157,14 +170,18 @@ export default function Activities() {
               <option value="alta">Alta</option><option value="sin">Sin datos de zonas</option>
             </select>
           </Field>
+          <label className="radio small" style={{ alignSelf: "end" }}>
+            <input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} />Solo con registro pendiente
+          </label>
         </div>
       </Card>
 
       <div style={{ height: 14 }} />
       <section className="card">
-        {list.length ? <div className="list">{list.map((a) => <ActivityRow key={a.id} a={a} />)}</div>
+        {list.length ? <div className="list">{list.map((a) => { const i = info.get(a.id); return <ActivityRow key={a.id} a={a} wodTitle={i?.title} tags={i?.tags} pending={i?.pending} />; })}</div>
           : <Empty title="No hay actividades con estos filtros">Amplía el rango de fechas o importa un archivo.</Empty>}
       </section>
+      </div>
       {importing && <ImportModal onClose={() => setImporting(false)} />}
       {pastingWod && <WodImportModal onClose={() => setPastingWod(false)} onSaved={(id) => { if (id) nav(`/actividades/${id}`); }} />}
     </>

@@ -42,7 +42,8 @@ export interface WodLoad {
 export interface WodItem {
   id: string;
   nombre: string;
-  participante: string | null;
+  /** Etiqueta del WOD («A», «B», «1»…): puede ser una estación o un ejercicio. No indica personas ni reparto del trabajo. */
+  etiqueta: string | null;
   objetivo: WodTarget | null;
   carga: WodLoad | null;
   equipamiento: string | null;
@@ -92,7 +93,10 @@ export interface WodSpec {
   formato: typeof WOD_FORMAT;
   version: typeof WOD_VERSION;
   nombre: string | null;
+  /** Fecha completa AAAA-MM-DD solo si es segura; si falta el año queda null. */
   fecha: string | null;
+  /** Fecha tal como se ve en la captura («12/10», «lunes 12»), sin completar. */
+  fecha_texto: string | null;
   modalidad: WodModality | null;
   transcripcion: string | null;
   calentamiento: WodWarmup | null;
@@ -282,7 +286,8 @@ function readLoad(v: unknown, ruta: string, ctx: Ctx): WodLoad | null {
   return Object.values(l).every((x) => x === null) ? null : l;
 }
 
-const ITEM_KEYS = ["id", "nombre", "participante", "objetivo", "carga", "equipamiento", "alternativas", "notas"] as const;
+// «participante» se acepta como nombre antiguo de «etiqueta»
+const ITEM_KEYS = ["id", "nombre", "etiqueta", "participante", "objetivo", "carga", "equipamiento", "alternativas", "notas"] as const;
 function readItems(v: unknown, ruta: string, ctx: Ctx, ids: Set<string>, prefix: string): WodItem[] {
   if (v === null || v === undefined) return [];
   if (!Array.isArray(v)) { ctx.keep(ruta, v); return []; }
@@ -292,7 +297,7 @@ function readItems(v: unknown, ruta: string, ctx: Ctx, ids: Set<string>, prefix:
     const r = `${ruta}[${i}]`;
     if (typeof raw === "string") {
       // Un ejercicio dado solo como texto: se conserva tal cual, sin interpretar objetivo ni carga.
-      out.push({ id: uniqueId(null, ids, prefix), nombre: raw.trim().slice(0, 200) || "Ejercicio sin nombre", participante: null,
+      out.push({ id: uniqueId(null, ids, prefix), nombre: raw.trim().slice(0, 200) || "Ejercicio sin nombre", etiqueta: null,
         objetivo: null, carga: null, equipamiento: null, alternativas: null, notas: null });
       return;
     }
@@ -303,7 +308,7 @@ function readItems(v: unknown, ruta: string, ctx: Ctx, ids: Set<string>, prefix:
     out.push({
       id: uniqueId(raw.id, ids, prefix),
       nombre: nombre ?? "Ejercicio sin nombre",
-      participante: str(raw.participante, `${r}.participante`, ctx, 40),
+      etiqueta: str(raw.etiqueta ?? raw.participante, `${r}.etiqueta`, ctx, 40),
       objetivo: readTarget(raw.objetivo, `${r}.objetivo`, ctx),
       carga: readLoad(raw.carga, `${r}.carga`, ctx),
       equipamiento: str(raw.equipamiento, `${r}.equipamiento`, ctx, 200),
@@ -391,12 +396,15 @@ function readBlock(raw: Obj, ruta: string, ctx: Ctx, blockIds: Set<string>, item
   };
 }
 
-const ROOT_KEYS = ["formato", "version", "nombre", "fecha", "modalidad", "transcripcion", "calentamiento", "bloques",
+const ROOT_KEYS = ["formato", "version", "nombre", "fecha", "fecha_texto", "modalidad", "transcripcion", "calentamiento", "bloques",
   "resumen_enfoque", "notas", "ambiguedades", "no_reconocido"] as const;
 
 /** Valida un objeto ya parseado como WOD v1. */
 export function validateWod(input: unknown): { ok: true; wod: WodSpec; warnings: string[] } | { ok: false; errors: string[] } {
-  if (!isObj(input)) return { ok: false, errors: ["El JSON debe ser un objeto con los datos del WOD ({ … }), no una lista ni un valor suelto."] };
+  if (Array.isArray(input)) {
+    return { ok: false, errors: [`Has pegado ${input.length} WOD en una lista. Cada importación es un único WOD: pídele a ChatGPT uno por bloque e impórtalos por separado.`] };
+  }
+  if (!isObj(input)) return { ok: false, errors: ["El JSON debe ser un objeto con los datos del WOD ({ … }), no un valor suelto."] };
   const ctx = new Ctx();
   const errors: string[] = [];
 
@@ -414,8 +422,9 @@ export function validateWod(input: unknown): { ok: true; wod: WodSpec; warnings:
   if (errors.length) return { ok: false, errors };
 
   ctx.extraKeys(input, ROOT_KEYS, "wod");
+  // Identificadores únicos en todo el WOD (bloques, ejercicios y calentamiento)
   const blockIds = new Set<string>();
-  const itemIds = new Set<string>();
+  const itemIds = blockIds;
 
   const rawBlocks = (input.bloques as unknown[] | undefined) ?? [];
   if (rawBlocks.length > MAX_BLOCKS) ctx.warnings.push(`El WOD tiene más de ${MAX_BLOCKS} bloques; se han leído los ${MAX_BLOCKS} primeros.`);
@@ -444,7 +453,13 @@ export function validateWod(input: unknown): { ok: true; wod: WodSpec; warnings:
   }
 
   let fecha = str(input.fecha, "fecha", ctx, 40);
-  if (fecha && !isValidISODate(fecha)) { ctx.keep("fecha", fecha); ctx.warnings.push(`La fecha «${fecha}» no tiene el formato AAAA-MM-DD: se ignora.`); fecha = null; }
+  let fechaTexto = str(input.fecha_texto, "fecha_texto", ctx, 80);
+  if (fecha && !isValidISODate(fecha)) {
+    // Sin año o en otro formato: no se completa; se conserva como texto visible
+    ctx.warnings.push(`La fecha «${fecha}» no es una fecha completa (AAAA-MM-DD): se conserva como texto y la fecha queda sin determinar.`);
+    if (!fechaTexto) fechaTexto = fecha;
+    fecha = null;
+  }
 
   // Conserva lo no reconocido que ya trajera un WOD guardado previamente
   if (Array.isArray(input.no_reconocido)) {
@@ -456,6 +471,7 @@ export function validateWod(input: unknown): { ok: true; wod: WodSpec; warnings:
     version: WOD_VERSION,
     nombre: str(input.nombre, "nombre", ctx, 200),
     fecha,
+    fecha_texto: fechaTexto,
     modalidad: enumOf<WodModality>(input.modalidad, { individual: "individual", parejas: "parejas", pareja: "parejas", pairs: "parejas", "por parejas": "parejas", "en parejas": "parejas" }, "modalidad", ctx),
     transcripcion: str(input.transcripcion, "transcripcion", ctx, MAX_TRANSCRIPTION),
     calentamiento,
@@ -465,6 +481,12 @@ export function validateWod(input: unknown): { ok: true; wod: WodSpec; warnings:
     ambiguedades: strList(input.ambiguedades, "ambiguedades", ctx) ?? [],
     no_reconocido: ctx.unrecognized,
   };
+  if (ctx.unrecognized.some((u) => /result|realiz|score|marca|tiempo_final|hecho/i.test(u.ruta))) {
+    ctx.warnings.push("El bloque trae datos que parecen resultados: no se importan como realizados. Regístralos tú en la actividad.");
+  }
+  if (ctx.unrecognized.some((u) => u.valor.includes("|"))) {
+    ctx.warnings.push("Algún valor contiene «|»: parece copiado de la lista de opciones de la plantilla. Elige un solo valor.");
+  }
   if (ctx.unrecognized.length) ctx.warnings.push(`${ctx.unrecognized.length} dato(s) no encajan en el formato: se conservan en «No reconocido» para que los revises.`);
   return { ok: true, wod, warnings: ctx.warnings };
 }
@@ -561,6 +583,18 @@ export function parseWodInput(text: string): WodParseResult {
   if (!text.trim()) return { kind: "error", errors: ["No hay texto. Pega el bloque que te ha devuelto ChatGPT."] };
   if (text.length > MAX_INPUT_CHARS) return { kind: "error", errors: [`El texto es demasiado largo (${text.length} caracteres; máximo ${MAX_INPUT_CHARS}).`] };
 
+  const fences = [...text.matchAll(/```[a-zA-Z0-9_-]*[ \t]*\r?\n\s*\{/g)].length;
+  if (fences > 1) {
+    return { kind: "error", errors: [`El texto contiene ${fences} bloques JSON. Cada importación es un único WOD: pega solo uno y repite la importación para el resto.`] };
+  }
+  // Una lista de WOD ([{…},{…}]) se detecta antes de buscar un objeto suelto
+  const bare = text.replace(/^[ \t]*```[a-zA-Z0-9_-]*[ \t]*$/gm, "").trim();
+  if (bare.startsWith("[")) {
+    try {
+      const v = validateWod(JSON.parse(normalizeQuotes(bare)));
+      if (!v.ok) return { kind: "error", errors: v.errors };
+    } catch { /* no es una lista JSON completa: se sigue con el resto de comprobaciones */ }
+  }
   const candidate = extractJsonCandidate(text);
   if (candidate) {
     let parsed: unknown;
