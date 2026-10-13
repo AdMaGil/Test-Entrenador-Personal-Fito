@@ -183,6 +183,19 @@ await expectError(
   "el usuario no puede insertar ejecuciones de sincronización",
 );
 
+// --- Objetivos del panel Hoy ---------------------------------------------
+console.log("Objetivos");
+const og = await db.query(`select weight_goal_date, active_kcal_goal, sessions_week_goal, sleep_goal_h from profiles where user_id = '${A}'`);
+ok(Object.values(og.rows[0]).every((v) => v === null), "los objetivos nuevos empiezan vacíos (sin inventar metas)");
+await as(A, () => db.exec(`update profiles set weight_goal_kg = 76, weight_goal_date = '2027-04-13', active_kcal_goal = 600, sessions_week_goal = 4, sleep_goal_h = 7.5`));
+const og2 = await db.query(`select active_kcal_goal, sessions_week_goal from profiles where user_id = '${A}'`);
+ok(og2.rows[0].active_kcal_goal === 600 && og2.rows[0].sessions_week_goal === 4, "el usuario guarda sus objetivos");
+await expectError(() => as(A, () => db.exec(`update profiles set active_kcal_goal = 0`)), "una meta de 0 kcal se rechaza");
+await expectError(() => as(A, () => db.exec(`update profiles set sleep_goal_h = 20`)), "una meta de sueño fuera de rango se rechaza");
+await as(B, () => db.exec(`update profiles set active_kcal_goal = 900 where user_id = '${A}'`));
+const og3 = await db.query(`select active_kcal_goal from profiles where user_id = '${A}'`);
+ok(og3.rows[0].active_kcal_goal === 600, "otro usuario no puede cambiar tus objetivos");
+
 // --- Fotos ---------------------------------------------------------------
 console.log("Almacenamiento de fotos");
 const bucket = (await db.query(`select public from storage.buckets where id = 'progress-photos'`)).rows[0];

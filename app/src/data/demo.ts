@@ -176,6 +176,23 @@ function generateStrengthSets(acts: Activity[]): { entries: StrengthEntry[]; byA
   return { entries, byActivity };
 }
 
+function demoToday(today: string, streams: Map<string, Streams>): Activity {
+  const r = rng(1013);
+  const durS = 46 * 60;
+  const id = nid("act");
+  streams.set(id, makeStreams("hiit", durS, 141, r, null));
+  return {
+    id, source: "intervals", external_id: id, data_origin: "medido", start_time: `${today}T07:30:00Z`, local_date: today,
+    name: "HIIT tipo Hyrox", source_type: "HighIntensityIntervalTraining", category_auto: "hiit", category_ambiguous: false,
+    category_override: null, category: "hiit", category_needs_review: false, duration_s: durS + 60, moving_time_s: durS,
+    distance_m: null, elevation_gain_m: null, avg_hr: 141, max_hr: 172, avg_speed_ms: null, max_speed_ms: null, avg_cadence: null,
+    rider_avg_power_w: null, rider_power_source: null, training_load: 62, intensity: null, trimp: null, calories: 512,
+    hr_zone_times_s: zonesFor("hiit", durS, true, r), hr_zone_bounds: [118, 132, 145, 156, 166, 175, 190],
+    device_name: "Demostración", has_gps: false, has_heartrate: true, stream_types: ["time", "heartrate"],
+    api_restricted: false, last_synced_at: null,
+  };
+}
+
 export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; streams: Map<string, Streams>; strengthByActivity: Map<string, StrengthSet[]> } {
   idCounter = 0;
   const { acts, streams } = generateActivities(today);
@@ -183,7 +200,9 @@ export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; strea
     user_id: "demo", display_name: "Demostración", timezone: "Europe/Madrid",
     units: { weight: "kg", distance: "km", elevation: "m" }, theme: "dark",
     goals: "Ejemplo: mejorar la base aeróbica en e-MTB y mantener dos sesiones de fuerza a la semana.",
-    weight_goal_kg: null, hr_max_bpm: null, available_days: [1, 2, 4, 6, 7], session_minutes_default: 45,
+    weight_goal_kg: 76, hr_max_bpm: null, available_days: [1, 2, 4, 6, 7], session_minutes_default: 45,
+    // Objetivos de ejemplo del panel Hoy
+    weight_goal_date: addDays(today, 182), active_kcal_goal: 600, sessions_week_goal: 4, sleep_goal_h: 7.5,
     sport_priority: ["hiit", "emtb", "mtb", "run"], equipment: ["Rack", "Barra olímpica", "Polea con agarres individuales"],
     limitations: null, preferences: null,
   };
@@ -202,6 +221,9 @@ export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; strea
   }
   const checkins: Checkin[] = [{ date: addDays(today, -1), energy: 4, fatigue: 2, soreness: [], sensations: "Bien" }];
   const { entries: strengthSets, byActivity: strengthByActivity } = generateStrengthSets(acts);
+  // Sesión de HIIT ya hecha hoy (después de generar las series para no alterar el resto del ejemplo)
+  const todayAct = demoToday(today, streams);
+  acts.unshift(todayAct);
   return {
     bundle: {
       profile, activities: acts, wellness: generateWellness(today, acts), measurements: generateMeasurements(today),
