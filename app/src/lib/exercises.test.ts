@@ -80,6 +80,15 @@ describe("comparación", () => {
     expect(sessionPoints(s)).toEqual([{ date: "2026-10-01", kg: 82.5, reps: 5 }]);
   });
 
+  it("con solo la carga registrada muestra ambas cargas sin veredicto", () => {
+    const s = exerciseSessions([
+      e({ date: "2026-09-20", activity_id: "x", reps: null, ...total(40) }),
+      e({ date: "2026-10-01", activity_id: "y", reps: null, ...total(42.5) }),
+    ], "sentadilla trasera");
+    expect(compareLastTwo(s)).toMatchObject({ kind: "solo_carga", prevKg: 40, lastKg: 42.5 });
+    expect(sessionPoints(s).map((p) => p.kg)).toEqual([40, 42.5]);
+  });
+
   it("dos mancuernas se comparan por su carga total", () => {
     const s = exerciseSessions([
       e({ date: "2026-09-20", activity_id: "x", exercise: "Devil press", reps: 15, load_mode: "por_implemento", implements: 2, load_per_implement_kg: 12.5 }),
@@ -111,6 +120,6 @@ describe("registro pendiente", () => {
     expect(activityPending({ ...base, workouts: [], strengthSets: [e({ activity_id: "a2", status: "pendiente" })] }, "a2")).toEqual({ blocks: 0, sets: 1 });
   });
   it("da título y etiquetas para el listado", () => {
-    expect(activityWodInfo(base, "a1")).toEqual({ title: "HYROX", tags: ["For Time"] });
+    expect(activityWodInfo(base, "a1")).toEqual({ title: "For Time", tags: ["For Time"] }); // «HYROX» genérico se sustituye por la estructura
   });
 });

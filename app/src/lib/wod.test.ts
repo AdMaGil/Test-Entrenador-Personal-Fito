@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import ejemploA from "../../../docs/wod/ejemplo-a-hyrox.json";
 import ejemploB from "../../../docs/wod/ejemplo-b-hyrox-parejas.json";
 import formatoDoc from "../../../docs/wod-formato.md?raw";
-import { describeLoad, describeTarget, parseLegacyTable, parseWodInput, validateWod, wodTags } from "./wod";
+import { describeLoad, describeTarget, isScoredBlock, loadedItems, parseLegacyTable, parseWodInput, structureSummary, validateWod, wodTags } from "./wod";
 
 const casoA = JSON.stringify(ejemploA, null, 2);
 const casoB = JSON.stringify(ejemploB, null, 2);
@@ -69,10 +69,19 @@ describe("extracción del JSON", () => {
     expect(wodOf(text).wod.bloques[0].tipo).toBe("amrap");
   });
 
-  it("da un error comprensible con la posición si el JSON está roto", () => {
+  it("si el bloque llega cortado lo dice claramente", () => {
     const r = parseWodInput('{"formato": "adolfo-wod", "version": 1, "bloques": [ {"tipo": "emom" ');
     expect(r.kind).toBe("error");
-    if (r.kind === "error") expect(r.errors[0]).toMatch(/no se puede leer/);
+    if (r.kind === "error") expect(r.errors[0]).toMatch(/incompleto/);
+    const cut = casoA.slice(0, casoA.lastIndexOf('"resumen_enfoque"'));
+    const r2 = parseWodInput(cut);
+    expect(r2.kind === "error" && r2.errors[0]).toMatch(/incompleto/);
+  });
+
+  it("da un error con la posición si el JSON está mal formado pero completo", () => {
+    const r = parseWodInput('{"formato": "adolfo-wod" "version": 1, "bloques": []}');
+    expect(r.kind).toBe("error");
+    if (r.kind === "error") expect(r.errors[0]).toMatch(/línea 1/);
   });
 
   it("rechaza versiones futuras sin intentar adivinar", () => {
@@ -198,34 +207,69 @@ describe("presentación", () => {
 });
 
 describe("contrato: documento, prompt y validador coinciden", () => {
-  const plantilla = (() => {
-    const i = formatoDoc.indexOf("=== PLANTILLA");
-    const j = formatoDoc.indexOf("=== FIN DE LA PLANTILLA ===");
-    const body = formatoDoc.slice(formatoDoc.indexOf("\n", i) + 1, j);
-    return JSON.parse(body);
+  const ejemploPrompt = (() => {
+    const i = formatoDoc.indexOf("Ejemplo de forma");
+    const start = formatoDoc.indexOf("{", i);
+    const end = formatoDoc.indexOf("\n", start);
+    return formatoDoc.slice(start, end);
   })();
 
-  it("la plantilla del prompt es JSON válido y el validador la acepta sin datos no reconocidos", () => {
-    const v = validateWod(plantilla);
-    expect(v.ok).toBe(true);
-    if (v.ok) expect(v.wod.no_reconocido).toEqual([]);
+  it("el ejemplo compacto del prompt es válido, sin avisos ni datos no reconocidos", () => {
+    const r = parseWodInput(ejemploPrompt);
+    expect(r.kind).toBe("wod");
+    if (r.kind === "wod") { expect(r.warnings).toEqual([]); expect(r.wod.no_reconocido).toEqual([]); }
   });
 
-  it("la plantilla no contiene valores con «|» (las opciones van aparte)", () => {
-    expect(JSON.stringify(plantilla)).not.toMatch(/\|/);
+  it("el ejemplo del prompt no contiene valores con «|» ni campos vacíos", () => {
+    expect(ejemploPrompt).not.toMatch(/\|/);
+    expect(ejemploPrompt).not.toMatch(/null|""|\[\]/);
   });
 
-  it("todas las claves de la plantilla son las que lee el validador", () => {
-    const keys = (o: Record<string, unknown>) => Object.keys(o).sort();
-    expect(keys(plantilla)).toEqual(["ambiguedades", "bloques", "calentamiento", "fecha", "fecha_texto", "formato", "modalidad", "nombre", "notas", "resumen_enfoque", "transcripcion", "version"]);
-    expect(keys(plantilla.bloques[0].ejercicios[0])).toEqual(["alternativas", "carga", "equipamiento", "etiqueta", "id", "nombre", "notas", "objetivo"]);
+  it("el JSON compacto es mucho más corto que el completo", () => {
+    expect(ejemploPrompt.length).toBeLessThan(1200);
   });
 
-  it("los ejemplos usan solo claves del contrato", () => {
+  it("los ejemplos completos usan solo claves del contrato", () => {
     for (const ej of [ejemploA, ejemploB]) {
       const v = validateWod(ej);
       expect(v.ok && v.wod.no_reconocido).toEqual([]);
     }
+  });
+});
+
+describe("registro rápido: bloques puntuables, cargas y resumen", () => {
+  const v = validateWod({
+    nombre: "Every 2' ×4 + EMOM 6' ×2",
+    bloques: [
+      { id: "b1", tipo: "emom", intervalo_s: 120, rondas: 4, ejercicios: [{ id: "e1", nombre: "Run", objetivo: { tipo: "metros", valor: 200 } }, { id: "e2", nombre: "Sled pull", carga: { texto: "100/80" } }] },
+      { id: "b2", tipo: "emom", duracion_s: 360, ejercicios: [{ id: "e3", nombre: "Bench press", etiqueta: "A", carga: { texto: "barra" }, repetir_carga_anterior: true }] },
+      { id: "b3", tipo: "emom", duracion_s: 360, ejercicios: [{ id: "e4", nombre: "Strict press", carga: { texto: "2DB", implementos: 2, modo: "por_implemento" } }] },
+      { id: "b4", tipo: "amrap", duracion_s: 600, ejercicios: [{ id: "e5", nombre: "Wall ball", carga: { texto: "wall ball" } }] },
+      { id: "b5", tipo: "descanso", duracion_s: 120 },
+      { id: "b6", tipo: "for_time", ejercicios: [{ id: "e6", nombre: "Run", objetivo: { tipo: "metros", valor: 500 } }] },
+    ],
+  });
+  if (!v.ok) throw new Error("WOD inválido");
+
+  it("solo AMRAP y For Time tienen resultado propio", () => {
+    expect(v.wod.bloques.filter(isScoredBlock).map((b) => b.id)).toEqual(["b4", "b6"]);
+  });
+
+  it("pide el peso solo en los ejercicios con carga (aunque no haya kilos)", () => {
+    expect(loadedItems(v.wod).map((x) => x.item.nombre)).toEqual(["Sled pull", "Bench press", "Strict press", "Wall ball"]);
+  });
+
+  it("un ejercicio con carga repetido en el WOD se pide una sola vez", () => {
+    const w = validateWod({ bloques: [{ tipo: "for_time", ejercicios: [{ nombre: "Wall ball", carga: { texto: "wall ball" } }, { nombre: "Run" }, { nombre: "wall  ball", carga: { texto: "wall ball" } }] }] });
+    expect(w.ok && loadedItems(w.wod).length).toBe(1);
+  });
+
+  it("conserva «LAST WEEK» como repetir_carga_anterior", () => {
+    expect(v.wod.bloques[1].ejercicios[0].repetir_carga_anterior).toBe(true);
+  });
+
+  it("resume la estructura sin el título genérico", () => {
+    expect(structureSummary(v.wod)).toBe("Every 2' ×4 + EMOM 6' ×2 + AMRAP 10' + For Time");
   });
 });
 

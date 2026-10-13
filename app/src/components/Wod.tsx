@@ -296,7 +296,7 @@ export function WodEditor({ value, onChange }: { value: WodSpec; onChange: (w: W
               ))}
               <div>
                 <button type="button" className="btn sm" onClick={() => setBlock(bi, { ejercicios: [...b.ejercicios, {
-                  id: uniqueItemId(value), nombre: "", etiqueta: null, objetivo: null, carga: null, equipamiento: null, alternativas: null, notas: null,
+                  id: uniqueItemId(value), nombre: "", etiqueta: null, objetivo: null, carga: null, equipamiento: null, alternativas: null, repetir_carga_anterior: null, notas: null,
                 }] })}><Icon name="plus" />Añadir ejercicio</button>
               </div>
             </div>

@@ -110,10 +110,14 @@ export function normalizeSetForSave(s: StrengthSet): StrengthSet {
   return out;
 }
 
-/** Falta el dato principal o la carga indicada está incompleta. */
+/**
+ * Falta el dato principal o la carga indicada está incompleta.
+ * Registro rápido: un peso resuelto sin repeticiones es un dato válido (solo
+ * se apunta la carga usada); no calcula volumen ni se compara por repeticiones.
+ */
 export function isIncomplete(s: StrengthSet): boolean {
   const hasWork = s.reps != null || Boolean(s.duration_s) || Boolean(s.distance_m) || Boolean(s.calories);
-  if (!hasWork) return true;
+  if (!hasWork) return totalLoadKg(s) === null;
   if (s.load_mode === "total" && (s.weight_kg == null || s.weight_kg <= 0) && !isNonRepSet(s)) return true;
   if (s.load_mode === "por_implemento" && totalLoadKg(s) === null) return true;
   return false;
