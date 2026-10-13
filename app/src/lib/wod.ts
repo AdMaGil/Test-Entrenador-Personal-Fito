@@ -48,6 +48,8 @@ export interface WodItem {
   carga: WodLoad | null;
   equipamiento: string | null;
   alternativas: string[] | null;
+  /** La pizarra pide repetir la carga anterior («LAST WEEK»): se destaca «Última vez». */
+  repetir_carga_anterior: boolean | null;
   notas: string | null;
 }
 
@@ -287,7 +289,7 @@ function readLoad(v: unknown, ruta: string, ctx: Ctx): WodLoad | null {
 }
 
 // «participante» se acepta como nombre antiguo de «etiqueta»
-const ITEM_KEYS = ["id", "nombre", "etiqueta", "participante", "objetivo", "carga", "equipamiento", "alternativas", "notas"] as const;
+const ITEM_KEYS = ["id", "nombre", "etiqueta", "participante", "objetivo", "carga", "equipamiento", "alternativas", "repetir_carga_anterior", "notas"] as const;
 function readItems(v: unknown, ruta: string, ctx: Ctx, ids: Set<string>, prefix: string): WodItem[] {
   if (v === null || v === undefined) return [];
   if (!Array.isArray(v)) { ctx.keep(ruta, v); return []; }
@@ -298,7 +300,7 @@ function readItems(v: unknown, ruta: string, ctx: Ctx, ids: Set<string>, prefix:
     if (typeof raw === "string") {
       // Un ejercicio dado solo como texto: se conserva tal cual, sin interpretar objetivo ni carga.
       out.push({ id: uniqueId(null, ids, prefix), nombre: raw.trim().slice(0, 200) || "Ejercicio sin nombre", etiqueta: null,
-        objetivo: null, carga: null, equipamiento: null, alternativas: null, notas: null });
+        objetivo: null, carga: null, equipamiento: null, alternativas: null, repetir_carga_anterior: null, notas: null });
       return;
     }
     if (!isObj(raw)) { ctx.keep(r, raw); return; }
@@ -313,6 +315,7 @@ function readItems(v: unknown, ruta: string, ctx: Ctx, ids: Set<string>, prefix:
       carga: readLoad(raw.carga, `${r}.carga`, ctx),
       equipamiento: str(raw.equipamiento, `${r}.equipamiento`, ctx, 200),
       alternativas: strList(raw.alternativas, `${r}.alternativas`, ctx),
+      repetir_carga_anterior: bool(raw.repetir_carga_anterior, `${r}.repetir_carga_anterior`, ctx),
       notas: str(raw.notas, `${r}.notas`, ctx),
     });
   });
@@ -523,6 +526,18 @@ function jsonErrorPosition(candidate: string, err: unknown): string {
   return ` (línea ${line}, columna ${col} del bloque JSON)`;
 }
 
+/** Llaves o corchetes sin cerrar al final del texto: el bloque se ha cortado. */
+function looksTruncated(json: string): boolean {
+  let depth = 0, inStr = false, esc = false;
+  for (const ch of json) {
+    if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") depth--;
+  }
+  return inStr || depth > 0;
+}
+
 /** Normaliza comillas tipográficas que algunos editores introducen y rompen el JSON. */
 function normalizeQuotes(s: string): string {
   return s.replace(/[“”„]/g, '"').replace(/[‘’]/g, "'").replace(/ /g, " ");
@@ -604,6 +619,12 @@ export function parseWodInput(text: string): WodParseResult {
       // Si no parece JSON pero sí una tabla antigua, se intenta ese formato
       const legacy = parseLegacyTable(text);
       if (legacy.rows.length) return { kind: "legacy", ...legacy, warnings: [] };
+      if (looksTruncated(candidate)) {
+        return { kind: "error", errors: [
+          "El bloque está incompleto: falta el final (se ha cortado al copiar).",
+          "Copia de nuevo el bloque entero con el botón de copiar; debe terminar en «}».",
+        ] };
+      }
       return { kind: "error", errors: [
         `El bloque parece JSON pero no se puede leer${jsonErrorPosition(candidate, e)}. Suele deberse a que falta una coma, una comilla o una llave de cierre al copiar.`,
         "Copia de nuevo el bloque completo con el botón de copiar de ChatGPT.",
@@ -685,6 +706,41 @@ export function describeRpe(r: WodRpe): string {
   if (r.desde_ronda !== null && r.hasta_ronda !== null && r.desde_ronda !== r.hasta_ronda) return `Rondas ${r.desde_ronda}-${r.hasta_ronda}: RPE ${r.valor}`;
   if (r.desde_ronda !== null) return `Ronda ${r.desde_ronda}: RPE ${r.valor}`;
   return `RPE ${r.valor}`;
+}
+
+/** Bloques con resultado propio: AMRAP (rondas + reps) y For Time (tiempo). EMOM, rondas sin cronómetro y descansos no puntúan. */
+export function isScoredBlock(b: WodBlock): boolean {
+  return b.tipo === "amrap" || b.tipo === "for_time";
+}
+
+/** Ejercicios con carga externa (los que tienen «carga», aunque sin kilos: «2DB», «KB», «100/80»…). Excluye el calentamiento. */
+export function loadedItems(w: WodSpec): { block: WodBlock; item: WodItem }[] {
+  // Un mismo ejercicio repetido en el WOD (p. ej. wall ball en rondas y en «THEN») se pide una sola vez
+  const seen = new Set<string>();
+  return w.bloques.flatMap((b) => b.ejercicios.filter((it) => it.carga !== null).map((item) => ({ block: b, item })))
+    .filter(({ item }) => {
+      const k = item.nombre.trim().toLowerCase().replace(/\s+/g, " ");
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+}
+
+/** Resumen corto de la estructura principal («AMRAP 10' ×3», «For Time», «EMOM 6' ×4»). */
+export function structureSummary(w: WodSpec): string {
+  const main = w.bloques.filter((b) => b.tipo !== "descanso");
+  const parts: { label: string; n: number }[] = [];
+  for (const b of main) {
+    const dur = b.duracion_s ? ` ${Math.round(b.duracion_s / 60)}'` : "";
+    const label = b.tipo === "emom" && b.intervalo_s && b.intervalo_s !== 60
+      ? `Every ${Math.round(b.intervalo_s / 60)}'${b.rondas ? ` ×${b.rondas}` : ""}`
+      : b.tipo === "otro" || b.tipo === "rondas"
+      ? (b.rondas ? `${b.rondas} rondas` : BLOCK_TYPE_LABEL[b.tipo])
+      : `${BLOCK_TYPE_LABEL[b.tipo]}${b.tipo === "for_time" ? "" : dur}`;
+    const last = parts[parts.length - 1];
+    if (last && last.label === label) last.n++; else parts.push({ label, n: 1 });
+  }
+  return parts.map((p) => (p.n > 1 ? `${p.label} ×${p.n}` : p.label)).join(" + ");
 }
 
 /** Etiquetas útiles para listados (EMOM, For Time, Parejas…), sin repetir. */

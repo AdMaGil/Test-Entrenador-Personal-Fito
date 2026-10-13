@@ -7,6 +7,7 @@ import { BlockResultForm, ExerciseLog, SaveBar, type LocalSet, type SaveState } 
 import { Card, Field, Modal, OriginBadge, Segmented, SportChip, Stat, Empty } from "../components/ui";
 import { PendingFlag, WodBlockCard, WodEditor, WodExtras, WodSummaryLine } from "../components/Wod";
 import { WodImportModal } from "../components/WodImport";
+import { QuickHint, QuickLog } from "../components/QuickLog";
 import { useApp } from "../data/AppData";
 import { fmtDateTime, fmtDay, fmtDayLong, fmtTime } from "../lib/dates";
 import {
@@ -20,7 +21,7 @@ import {
 } from "../lib/session";
 import { isBike, SPORT_DESCRIPTION, SPORT_LABEL, SPORTS, sourceTypeLabel, sportColor } from "../lib/sports";
 import type { Activity, BlockResult, Feedback, Sport, StrengthSet, Streams, Workout } from "../lib/types";
-import type { WodItem, WodSpec } from "../lib/wod";
+import { structureSummary, type WodBlock, type WodItem, type WodSpec } from "../lib/wod";
 
 const MapView = lazy(() => import("../components/MapView"));
 
@@ -202,15 +203,18 @@ function WodLinkTools({ a }: { a: Activity }) {
 }
 
 /** Referencia «Última vez»: se muestra, pero nunca se registra como resultado actual. */
-function LastTimeRef({ exercise, a }: { exercise: string; a: Activity }) {
+function LastTimeRef({ exercise, a, quiet = false, highlight = false }: { exercise: string; a: Activity; quiet?: boolean; highlight?: boolean }) {
   const { data } = useApp();
   const key = exerciseKey(exercise);
   if (!key) return null;
   const last = lastTime(data.strengthSets, key, { activityId: a.id, date: a.local_date });
-  if (!last) return <span className="ref-line">Primer registro de este ejercicio</span>;
+  if (!last) {
+    if (quiet) return highlight ? <span className="ref-line">Sin registro anterior de este ejercicio</span> : null;
+    return <span className="ref-line">Primer registro de este ejercicio</span>;
+  }
   return (
-    <span className="ref-line">
-      <span className="tag-ref">Última vez</span>
+    <span className={`ref-line ${highlight ? "highlight" : ""}`}>
+      <span className="tag-ref">{highlight ? "Repite · última vez" : "Última vez"}</span>
       {last.activityId ? <Link to={`/actividades/${last.activityId}`}>{fmtDay(last.date)}</Link> : fmtDay(last.date)}
       {": "}{last.sets.map(describeSet).join(" ; ")}
       {last.ambiguous && <> <PendingFlag>histórico con carga sin aclarar</PendingFlag></>}
@@ -363,6 +367,18 @@ export default function ActivityDetail() {
     const idx = cur.lastIndexOf(last as LocalSet);
     return idx >= 0 ? [...cur.slice(0, idx + 1), fresh, ...cur.slice(idx + 1)] : [...cur, fresh];
   });
+  // Registro rápido: un único peso por ejercicio (crea o actualiza su primera serie; si se vacía y no se había guardado, se quita)
+  const quickWeight = (w: Workout, block: WodBlock, item: WodItem, patch: Partial<StrengthSet>) => setSets((cur) => {
+    if (!cur) return cur;
+    const i = cur.findIndex((x) => x.workout_id === w.id && x.item_ref === item.id);
+    if (i < 0) {
+      return [...cur, { ...newSetFor(item, { workoutId: w.id, blockRef: block.id, setNumber: 1 }), ...patch, _k: `k${++keySeq}` }];
+    }
+    const next = { ...cur[i], ...patch };
+    const empty = next.reps == null && !next.duration_s && !next.distance_m && !next.calories && next.weight_kg == null && next.load_per_implement_kg == null && !next.notes;
+    if (empty && !next.id) return cur.filter((_, j) => j !== i);
+    return cur.map((x, j) => (j === i ? next : x));
+  });
   const renameGroup = (oldKey: string, name: string) => setSets((cur) => cur && cur.map((s) => (!s.item_ref && groupKey(s.exercise) === oldKey ? { ...s, exercise: name } : s)));
 
   // ---------------- guardado ----------------
@@ -424,7 +440,8 @@ export default function ActivityDetail() {
   const bike = isBike(a.category);
   const garmin = (a.device_name ?? "").toLowerCase().includes("garmin");
   const setCategory = (c: Sport | null) => run((r) => r.setCategoryOverride(a.id, c), c ? `Clasificada como ${SPORT_LABEL[c]}` : "Categoría automática restablecida");
-  const title = activeWods[0]?.title || a.name || SPORT_LABEL[a.category];
+  const wodTitle = activeWods[0] ? (activeWods[0].title && !/^hyrox$/i.test(activeWods[0].title) ? activeWods[0].title : structureSummary(activeWods[0].spec)) : null;
+  const title = wodTitle || a.name || SPORT_LABEL[a.category];
   const strengthy = a.category === "hiit" || a.category === "otro";
   const loading = sets === null || f === null;
 
@@ -473,7 +490,7 @@ export default function ActivityDetail() {
                 <p className="status info"><Icon name="info" />Para importar WOD completos falta aplicar la migración de la base de datos. Puedes seguir registrando series.</p>
               )}
               {activeWods.map((w) => (
-                <Card key={w.id} title={<div className="stack" style={{ gap: 4 }}><h2>WOD previsto{w.title ? ` · ${w.title}` : ""}</h2><WodSummaryLine wod={w.spec} /></div>}
+                <Card key={w.id} title={<div className="stack" style={{ gap: 4 }}><h2>{activeWods.length > 1 ? (w.title && !/^hyrox$/i.test(w.title) ? w.title : structureSummary(w.spec) || "WOD") : "Registro del WOD"}</h2></div>}
                   action={<div className="row" style={{ gap: 2 }}>
                     <button className="btn ghost sm" onClick={() => setEditingWod(w)} disabled={dirty} title={dirty ? "Guarda antes los cambios" : undefined}><Icon name="edit" />Editar</button>
                     <button className="btn ghost sm" disabled={dirty} onClick={() => {
@@ -481,7 +498,14 @@ export default function ActivityDetail() {
                       run((r) => r.setWorkoutArchived(w.id, true), "WOD archivado");
                     }}><Icon name="trash" />Archivar</button>
                   </div>}>
-                  <div className="stack" style={{ gap: 10 }}>
+                  <QuickLog w={w} sets={sets ?? []} getResult={(ref) => resultFor(w, ref)} setResult={setResult}
+                    onWeight={(b, it, p) => quickWeight(w, b, it, p)} f={f} setF={setF}
+                    renderLast={(name, hl) => <LastTimeRef exercise={name} a={a} quiet highlight={hl} />} title={title} />
+                  <details className="disclosure" style={{ marginTop: 12 }}>
+                  <summary><Icon name="chevron" className="ico chev" />Ver WOD completo y registro detallado</summary>
+                  <div className="stack" style={{ gap: 10, paddingBottom: 12 }}>
+                    <QuickHint />
+                    <WodSummaryLine wod={w.spec} />
                     <WodExtras wod={w.spec} position="before" />
                     {w.spec.bloques.map((b, bi) => (
                       <WodBlockCard key={b.id} block={b} index={bi} modality={w.spec.modalidad} itemsHidden={b.tipo !== "descanso"}>
@@ -500,11 +524,17 @@ export default function ActivityDetail() {
                       </WodBlockCard>
                     ))}
                     <WodExtras wod={w.spec} position="after" />
+                    <div>
+                      <button className="btn sm" onClick={() => setSets((cur) => cur && [...cur, { ...newSetFor(null, { workoutId: null, blockRef: null, setNumber: 1, exercise: "" }), _k: `k${++keySeq}` }])}>
+                        <Icon name="plus" />Añadir ejercicio no previsto
+                      </button>
+                    </div>
                   </div>
+                  </details>
                 </Card>
               ))}
 
-              {(otherGroups.size > 0 || strengthy) && (
+              {(otherGroups.size > 0 || (strengthy && !activeWods.length)) && (
                 <Card title={activeWods.length ? "Otros ejercicios" : "Ejercicios, series y cargas"}>
                   <div className="stack" style={{ gap: 12 }}>
                     {[...otherGroups.entries()].map(([k, group]) => (
@@ -517,17 +547,24 @@ export default function ActivityDetail() {
                         onAdd={() => addSetFor(null, null, null, group[0].exercise)} onChangeSet={patchSet} onDuplicate={duplicate} onRemove={removeSet} />
                     ))}
                     {otherGroups.size === 0 && !activeWods.length && <p className="small muted">Aún no hay series. Pega el WOD o añade un ejercicio.</p>}
-                    <div>
-                      <button className="btn sm" onClick={() => setSets((cur) => cur && [...cur, { ...newSetFor(null, { workoutId: null, blockRef: null, setNumber: 1, exercise: "" }), _k: `k${++keySeq}` }])}>
-                        <Icon name="plus" />{activeWods.length ? "Añadir ejercicio no previsto" : "Añadir ejercicio"}
-                      </button>
-                    </div>
+                    {!activeWods.length && (
+                      <div>
+                        <button className="btn sm" onClick={() => setSets((cur) => cur && [...cur, { ...newSetFor(null, { workoutId: null, blockRef: null, setNumber: 1, exercise: "" }), _k: `k${++keySeq}` }])}>
+                          <Icon name="plus" />Añadir ejercicio
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </Card>
               )}
 
               <datalist id="cat-all">{catalog.map((c) => <option key={c.key} value={c.name} />)}</datalist>
-              {f && <FeedbackForm a={a} f={f} setF={setF} hasExisting={Boolean(data.feedback[a.id])} />}
+              {f && (activeWods.length ? (
+                <details className="disclosure">
+                  <summary><Icon name="chevron" className="ico chev" />Sensaciones y más datos de la sesión</summary>
+                  <div style={{ paddingBottom: 12 }}><FeedbackForm a={a} f={f} setF={setF} hasExisting={Boolean(data.feedback[a.id])} /></div>
+                </details>
+              ) : <FeedbackForm a={a} f={f} setF={setF} hasExisting={Boolean(data.feedback[a.id])} />)}
               <WodLinkTools a={a} />
             </>
           )}

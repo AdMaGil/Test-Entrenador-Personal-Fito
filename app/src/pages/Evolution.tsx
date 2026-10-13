@@ -185,6 +185,9 @@ type StrengthRange = "90" | "365" | "todo";
 
 function ComparisonText({ c }: { c: Comparison }) {
   if (c.kind === "insuficiente") return <p className="small muted">{c.message}</p>;
+  if (c.kind === "solo_carga") {
+    return <p className="small">Carga usada: <span className="num">{fmtKg(c.prevKg)} kg</span> el {fmtDay(c.prevDate)} → <span className="num">{fmtKg(c.lastKg)} kg</span> el {fmtDay(c.lastDate)}. <span className="muted">Sin repeticiones registradas no se valora si hay mejora.</span></p>;
+  }
   if (c.kind === "mismas_reps") {
     const reps = `${c.reps} reps${c.scope === "por_lado" ? " por lado" : ""}`;
     const verb = c.deltaKg > 0 ? `+${fmtKg(c.deltaKg)} kg` : c.deltaKg < 0 ? `−${fmtKg(Math.abs(c.deltaKg))} kg` : "misma carga";

@@ -80,10 +80,17 @@ function comparable(s: StrengthSet): boolean {
   return s.status !== "pendiente" && s.reps != null && loadState(s) === "resuelta";
 }
 
+/** Carga resuelta (con o sin repeticiones): sirve para la gráfica y para mostrar valores, no para afirmar mejora. */
+function resolvedLoad(s: StrengthSet): boolean {
+  return s.status !== "pendiente" && loadState(s) === "resuelta";
+}
+
 export type Comparison =
   | { kind: "insuficiente"; message: string }
   | { kind: "mismas_reps"; reps: number; scope: "total" | "por_lado"; prevKg: number; lastKg: number; deltaKg: number; prevDate: string; lastDate: string }
-  | { kind: "reps_distintas"; prev: string; last: string; prevDate: string; lastDate: string };
+  | { kind: "reps_distintas"; prev: string; last: string; prevDate: string; lastDate: string }
+  /** Solo se registró la carga (registro rápido): se muestran ambas sin veredicto. */
+  | { kind: "solo_carga"; prevKg: number; lastKg: number; prevDate: string; lastDate: string };
 
 /**
  * Compara las dos sesiones más recientes con series comparables.
@@ -92,7 +99,15 @@ export type Comparison =
  */
 export function compareLastTwo(sessions: ExerciseSession[]): Comparison {
   const usable = sessions.map((s) => ({ ...s, sets: s.sets.filter(comparable) })).filter((s) => s.sets.length);
-  if (usable.length < 2) return { kind: "insuficiente", message: "Registra otra sesión para comparar." };
+  if (usable.length < 2) {
+    // Sin repeticiones en alguna de las dos: se enseñan las cargas, sin afirmar mejora
+    const loads = sessions.map((s) => ({ ...s, sets: s.sets.filter(resolvedLoad) })).filter((s) => s.sets.length);
+    if (loads.length >= 2) {
+      const max = (x: StrengthSet[]) => Math.max(...x.map((y) => totalLoadKg(y) as number));
+      return { kind: "solo_carga", lastKg: max(loads[0].sets), prevKg: max(loads[1].sets), lastDate: loads[0].date, prevDate: loads[1].date };
+    }
+    return { kind: "insuficiente", message: "Registra otra sesión para comparar." };
+  }
   const [last, prev] = usable;
   const keyOf = (s: StrengthSet) => `${s.reps}|${s.reps_scope ?? "total"}`;
   const best = (sets: StrengthSet[]) => {
@@ -115,13 +130,13 @@ export function compareLastTwo(sessions: ExerciseSession[]): Comparison {
 }
 
 /** Puntos para la gráfica: carga máxima resuelta por sesión, con sus repeticiones (solo series comparables). */
-export function sessionPoints(sessions: ExerciseSession[]): { date: string; kg: number; reps: number }[] {
-  const out: { date: string; kg: number; reps: number }[] = [];
+export function sessionPoints(sessions: ExerciseSession[]): { date: string; kg: number; reps: number | null }[] {
+  const out: { date: string; kg: number; reps: number | null }[] = [];
   for (const s of [...sessions].reverse()) {
-    const sets = s.sets.filter(comparable);
+    const sets = s.sets.filter(resolvedLoad);
     if (!sets.length) continue;
     const top = sets.reduce((a, b) => ((totalLoadKg(b) as number) > (totalLoadKg(a) as number) ? b : a));
-    out.push({ date: s.date, kg: totalLoadKg(top) as number, reps: top.reps as number });
+    out.push({ date: s.date, kg: totalLoadKg(top) as number, reps: top.reps ?? null });
   }
   return out;
 }

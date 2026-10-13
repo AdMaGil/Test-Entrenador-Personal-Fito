@@ -1,10 +1,11 @@
 // Registro pendiente: solo cuando hay algo EXPLÍCITAMENTE pendiente.
-//   * un WOD vinculado con bloques sin resultado (ni «Hecho» ni «No hecho»), o
+//   * un WOD vinculado con bloques PUNTUABLES (AMRAP, For Time) sin resultado
+//     (ni «Hecho» ni «No hecho»); EMOM, rondas y descansos no piden resultado, o
 //   * series marcadas como pendientes (p. ej. peso «revisar»).
 // Una actividad sin series ni WOD (bici, carrera, sesión sin carga) NO se
 // considera incompleta.
 import type { DataBundle, Workout } from "./types";
-import { wodTags } from "./wod";
+import { isScoredBlock, structureSummary, wodTags } from "./wod";
 
 export interface ActivityPending {
   blocks: number;
@@ -22,7 +23,7 @@ export function activityPending(data: Data, activityId: string): ActivityPending
   if (data.resultsReady) {
     for (const w of activeWorkoutsOf(data, activityId)) {
       for (const b of w.spec.bloques) {
-        if (b.tipo === "descanso") continue;
+        if (!isScoredBlock(b)) continue;
         const r = data.blockResults.find((x) => x.workout_id === w.id && x.block_ref === b.id);
         if (!r || r.status === null) blocks++;
       }
@@ -47,7 +48,9 @@ export function activityWodInfo(data: Pick<DataBundle, "workouts">, activityId: 
   if (!ws.length) return { title: null, tags: [] };
   const tags = new Set<string>();
   for (const w of ws) for (const t of wodTags(w.spec)) tags.add(t);
-  return { title: ws.map((w) => w.title).filter(Boolean).join(" + ") || null, tags: [...tags] };
+  // «HYROX» (o similar genérico) no distingue un día de otro: se usa la estructura
+  const name = (w: Workout) => (w.title && !/^hyrox$/i.test(w.title.trim()) ? w.title : structureSummary(w.spec) || w.title);
+  return { title: ws.map(name).filter(Boolean).join(" + ") || null, tags: [...tags] };
 }
 
 export function unlinkedWorkouts(data: Pick<DataBundle, "workouts">): Workout[] {

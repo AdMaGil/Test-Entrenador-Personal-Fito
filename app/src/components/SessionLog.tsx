@@ -20,9 +20,9 @@ export function parseNum(v: string, opts: { int?: boolean } = {}): number | null
   return opts.int ? Math.round(n) : n;
 }
 
-function NumField({ label, unit, value, onChange, int = false, placeholder, width = 70, hint }: {
+export function NumField({ label, unit, value, onChange, int = false, placeholder, width = 70, hint, hideLabel = false }: {
   label: string; unit?: string; value: number | null | undefined; onChange: (v: number | null) => void;
-  int?: boolean; placeholder?: string; width?: number; hint?: string;
+  int?: boolean; placeholder?: string; width?: number; hint?: string; hideLabel?: boolean;
 }) {
   const id = useId();
   // Texto local para permitir escribir «22,» sin perder la coma
@@ -30,7 +30,7 @@ function NumField({ label, unit, value, onChange, int = false, placeholder, widt
   const shown = draft ?? (value === null || value === undefined ? "" : String(value).replace(".", ","));
   return (
     <div className="nf">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id} className={hideLabel ? "sr-only" : undefined}>{label}</label>
       <div className="nf-box">
         <input id={id} className="input" style={{ width }} inputMode={int ? "numeric" : "decimal"} autoComplete="off"
           value={shown} placeholder={placeholder}
@@ -43,7 +43,7 @@ function NumField({ label, unit, value, onChange, int = false, placeholder, widt
   );
 }
 
-function TimeField({ label, value, onChange }: { label: string; value: number | null | undefined; onChange: (v: number | null) => void }) {
+export function TimeField({ label, value, onChange }: { label: string; value: number | null | undefined; onChange: (v: number | null) => void }) {
   const m = value != null ? Math.floor(value / 60) : null;
   const s = value != null ? Math.round(value % 60) : null;
   const set = (mm: number | null, ss: number | null) => onChange(mm === null && ss === null ? null : (mm ?? 0) * 60 + Math.min(59, ss ?? 0));

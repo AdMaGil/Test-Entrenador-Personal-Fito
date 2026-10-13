@@ -61,6 +61,10 @@ describe("cargas", () => {
     const missing = normalizeSetForSave(set({ reps: 15, load_mode: "por_implemento", implements: 2, load_per_implement_kg: null }));
     expect(missing.status).toBe("pendiente");
     expect(isIncomplete(set({}))).toBe(true);
+    // Registro rápido: solo el peso usado también es un dato válido
+    const soloPeso = normalizeSetForSave(set({ load_mode: "total", weight_kg: 40 }));
+    expect(soloPeso.status).toBe("realizado");
+    expect(setVolumeKg(soloPeso)).toBeNull();
   });
 
   it("una serie importada con «revisar» sigue pendiente hasta que tiene peso o se marca sin carga", () => {
