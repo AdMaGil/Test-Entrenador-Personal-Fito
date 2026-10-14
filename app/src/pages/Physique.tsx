@@ -282,12 +282,15 @@ const COMPOSITION: { key: CompKey; label: string; unit: string; digits: number }
   { key: "bmr_kcal", label: "Metabolismo basal", unit: "kcal", digits: 0 },
   { key: "metabolic_age", label: "Edad metabólica", unit: "años", digits: 0 },
 ];
+// Subconjunto que responde a dieta y entrenamiento en semanas/meses (no masa ósea, edad metabólica,
+// metabolismo basal ni agua corporal, que son estables o ruidosas día a día por hidratación).
+const RESPONSIVE_KEYS: CompKey[] = ["muscle_mass_kg", "subcutaneous_fat_pct", "fat_free_mass_kg", "visceral_fat"];
 
 /** Composición estimada por la báscula (Feelfit). Solo días con dato real; nunca se rellena. */
 function Composition({ onImport }: { onImport: () => void }) {
   const { data, today } = useApp();
   const t = useChartTheme();
-  const [metric, setMetric] = useState<CompKey>("muscle_mass_kg");
+  const [selected, setSelected] = useState<CompKey[]>(["muscle_mass_kg", "subcutaneous_fat_pct"]);
   const [range, setRange] = useState<"365" | "1095" | "todo">("1095");
   const withComp = data.measurements.filter((m) => m.source === "feelfit")
     .sort((a, b) => (a.measured_at ?? a.measured_on).localeCompare(b.measured_at ?? b.measured_on));
@@ -296,12 +299,40 @@ function Composition({ onImport }: { onImport: () => void }) {
       Importa el export de Feelfit para ver masa muscular, grasa visceral, agua corporal y el resto de estimaciones de la báscula.</Empty>;
   }
   const last = withComp[withComp.length - 1];
-  const def = COMPOSITION.find((c) => c.key === metric) ?? COMPOSITION[0];
   const from = range === "todo" ? "0000-00-00" : addDays(today, -Number(range));
-  // Una medición por día (la última), igual que las series de peso
-  const byDay = new Map<string, number>();
-  for (const m of withComp as Measurement[]) { const v = m[metric]; if (typeof v === "number" && m.measured_on >= from) byDay.set(m.measured_on, v); }
-  const series = [...byDay.entries()].map(([x, v]) => ({ x, v }));
+  const colors: Record<string, string> = {
+    muscle_mass_kg: t.ok, subcutaneous_fat_pct: t.crit, fat_free_mass_kg: t.info, visceral_fat: t.warn,
+  };
+  const picked = RESPONSIVE_KEYS.filter((k) => selected.includes(k));
+  const multi = picked.length > 1;
+
+  // Una medición por día (la última) por métrica, igual que las series de peso. Nunca se rellenan huecos.
+  const byKeyDay = new Map<CompKey, Map<string, number>>();
+  for (const k of picked) {
+    const byDay = new Map<string, number>();
+    for (const m of withComp as Measurement[]) { const v = m[k]; if (typeof v === "number" && m.measured_on >= from) byDay.set(m.measured_on, v); }
+    byKeyDay.set(k, byDay);
+  }
+  // Primer valor real de cada métrica en el periodo, para normalizar cuando se comparan varias a la vez
+  // (masa muscular en kg y grasa en % no comparten escala; el cambio relativo sí es comparable).
+  const base = new Map<CompKey, number>();
+  if (multi) for (const k of picked) { const first = [...(byKeyDay.get(k) ?? new Map())].sort(([a], [b]) => a.localeCompare(b))[0]; if (first) base.set(k, first[1]); }
+
+  const allDays = [...new Set(picked.flatMap((k) => [...(byKeyDay.get(k) ?? new Map()).keys()]))].sort();
+  const series = allDays.map((x) => {
+    const row: Record<string, string | number | null> = { x };
+    for (const k of picked) {
+      const v = byKeyDay.get(k)?.get(x);
+      if (v === undefined) { row[k] = null; continue; }
+      const b = base.get(k);
+      row[k] = multi && b ? ((v - b) / b) * 100 : v;
+    }
+    return row;
+  });
+
+  const chartSeries = picked.map((k) => ({ key: k, label: COMPOSITION.find((c) => c.key === k)!.label, color: colors[k] }));
+  const defFor = (key: string) => COMPOSITION.find((c) => c.key === key);
+
   return (
     <div className="stack">
       <p className="small ink2">Última medición: <b>{fmtDay(last.measured_on)} {last.measured_on.slice(0, 4)}</b> <OriginBadge origin="estimado" title="Estimación de la báscula por bioimpedancia" /></p>
@@ -311,17 +342,28 @@ function Composition({ onImport }: { onImport: () => void }) {
           return <Stat key={c.key} label={c.label} value={typeof v === "number" ? fmtNum(v, c.digits) : null} unit={c.unit === "nivel" ? undefined : c.unit} />;
         })}
       </div>
-      <div className="row">
-        <select className="input" style={{ width: "auto" }} value={metric} onChange={(e) => setMetric(e.target.value as CompKey)} aria-label="Métrica">
-          {COMPOSITION.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-        </select>
-        <Segmented label="Periodo" value={range} onChange={setRange} options={[{ value: "365", label: "1 año" }, { value: "1095", label: "3 años" }, { value: "todo", label: "Todo" }]} />
+      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        {RESPONSIVE_KEYS.map((k) => {
+          const c = COMPOSITION.find((x) => x.key === k)!;
+          const on = selected.includes(k);
+          return (
+            <button key={k} type="button" className="chip" aria-pressed={on}
+              onClick={() => setSelected((prev) => on ? prev.filter((x) => x !== k) : [...prev, k])}>
+              <span className="dot" style={{ background: colors[k] }} />{c.label}
+            </button>
+          );
+        })}
       </div>
-      {series.length >= 2 ? (
-        <LineChartBox data={series} xKey="x" ariaLabel={def.label} xFormat={(v) => `${fmtDay(String(v))} ${String(v).slice(2, 4)}`}
-          yFormat={(v) => `${fmtNum(v, def.digits)}${def.unit === "nivel" ? "" : ` ${def.unit}`}`} series={[{ key: "v", label: def.label, color: t.info }]} />
-      ) : <p className="small muted">Hacen falta al menos dos mediciones en el periodo.</p>}
+      <Segmented label="Periodo" value={range} onChange={setRange} options={[{ value: "365", label: "1 año" }, { value: "1095", label: "3 años" }, { value: "todo", label: "Todo" }]} />
+      {series.length >= 2 && picked.length ? (
+        <LineChartBox data={series} xKey="x" ariaLabel={picked.map((k) => COMPOSITION.find((c) => c.key === k)!.label).join(", ")}
+          xFormat={(v) => `${fmtDay(String(v))} ${String(v).slice(2, 4)}`}
+          yFormat={(v, key) => multi ? `${v >= 0 ? "+" : ""}${fmtNum(v, 1)} %` : (() => { const d = defFor(key); return `${fmtNum(v, d?.digits ?? 1)}${d?.unit === "nivel" ? "" : ` ${d?.unit ?? ""}`}`; })()}
+          series={chartSeries} />
+      ) : <p className="small muted">{picked.length ? "Hacen falta al menos dos mediciones en el periodo." : "Elige al menos una variable."}</p>}
+      {multi && <p className="chart-note">Con varias variables a la vez, la gráfica muestra el cambio relativo (%) desde la primera medición del periodo, porque kg, % y el nivel de grasa visceral no comparten escala.</p>}
       <p className="chart-note">Son estimaciones de la báscula por bioimpedancia: varían con la hidratación, la hora y la comida. Compara tendencias en condiciones parecidas (p. ej. por la mañana), no valores sueltos. Los días sin medición no se rellenan.</p>
+      <p className="tiny muted">Masa ósea, edad metabólica, metabolismo basal y agua corporal no están en este selector: son estables o varían por hidratación/hora más que por dieta y entreno, así que compararlas aquí no aporta información útil sobre tu progreso.</p>
     </div>
   );
 }
