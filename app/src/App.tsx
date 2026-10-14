@@ -10,6 +10,7 @@ const Calendar = lazy(() => import("./pages/Calendar"));
 const Activities = lazy(() => import("./pages/Activities"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
 const Evolution = lazy(() => import("./pages/Evolution"));
+const RoutesPage = lazy(() => import("./pages/Routes"));
 const Health = lazy(() => import("./pages/Health"));
 const Physique = lazy(() => import("./pages/Physique"));
 const Coach = lazy(() => import("./pages/Coach"));
@@ -45,6 +46,7 @@ function Shell() {
               <Route path="/actividades" element={<Activities />} />
               <Route path="/actividades/:id" element={<ActivityDetail />} />
               <Route path="/evolucion" element={<Evolution />} />
+              <Route path="/rutas" element={<RoutesPage />} />
               <Route path="/salud" element={<Health />} />
               <Route path="/fisico" element={<Physique />} />
               <Route path="/entrenador" element={<Coach />} />
