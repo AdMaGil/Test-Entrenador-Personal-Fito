@@ -7,6 +7,7 @@ import { makeDisplayVersion } from "../lib/photos";
 import type {
   Activity, Checkin, CoachMessage, CoachPayload, DataBundle, Feedback, Framing, Measurement, ParsedImport,
   PhotoEntry, PhotoFile, PlannedDraft, PlannedSession, Pose, Profile, Sport, StrengthEntry, StrengthSet, Streams, Wellness,
+  Workout, WorkoutDraft, BlockResult,
 } from "../lib/types";
 import { buildSession } from "../lib/coach";
 import type { Repo } from "./repo";
@@ -175,6 +176,23 @@ function generateStrengthSets(acts: Activity[]): { entries: StrengthEntry[]; byA
   return { entries, byActivity };
 }
 
+function demoToday(today: string, streams: Map<string, Streams>): Activity {
+  const r = rng(1013);
+  const durS = 46 * 60;
+  const id = nid("act");
+  streams.set(id, makeStreams("hiit", durS, 141, r, null));
+  return {
+    id, source: "intervals", external_id: id, data_origin: "medido", start_time: `${today}T07:30:00Z`, local_date: today,
+    name: "HIIT tipo Hyrox", source_type: "HighIntensityIntervalTraining", category_auto: "hiit", category_ambiguous: false,
+    category_override: null, category: "hiit", category_needs_review: false, duration_s: durS + 60, moving_time_s: durS,
+    distance_m: null, elevation_gain_m: null, avg_hr: 141, max_hr: 172, avg_speed_ms: null, max_speed_ms: null, avg_cadence: null,
+    rider_avg_power_w: null, rider_power_source: null, training_load: 62, intensity: null, trimp: null, calories: 512,
+    hr_zone_times_s: zonesFor("hiit", durS, true, r), hr_zone_bounds: [118, 132, 145, 156, 166, 175, 190],
+    device_name: "Demostración", has_gps: false, has_heartrate: true, stream_types: ["time", "heartrate"],
+    api_restricted: false, last_synced_at: null,
+  };
+}
+
 export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; streams: Map<string, Streams>; strengthByActivity: Map<string, StrengthSet[]> } {
   idCounter = 0;
   const { acts, streams } = generateActivities(today);
@@ -182,7 +200,9 @@ export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; strea
     user_id: "demo", display_name: "Demostración", timezone: "Europe/Madrid",
     units: { weight: "kg", distance: "km", elevation: "m" }, theme: "dark",
     goals: "Ejemplo: mejorar la base aeróbica en e-MTB y mantener dos sesiones de fuerza a la semana.",
-    weight_goal_kg: null, hr_max_bpm: null, available_days: [1, 2, 4, 6, 7], session_minutes_default: 45,
+    weight_goal_kg: 76, hr_max_bpm: null, available_days: [1, 2, 4, 6, 7], session_minutes_default: 45,
+    // Objetivos de ejemplo del panel Hoy
+    weight_goal_date: addDays(today, 182), active_kcal_goal: 600, sessions_week_goal: 4, sleep_goal_h: 7.5,
     sport_priority: ["hiit", "emtb", "mtb", "run"], equipment: ["Rack", "Barra olímpica", "Polea con agarres individuales"],
     limitations: null, preferences: null,
   };
@@ -201,11 +221,14 @@ export function buildDemoBundle(today = todayISO()): { bundle: DataBundle; strea
   }
   const checkins: Checkin[] = [{ date: addDays(today, -1), energy: 4, fatigue: 2, soreness: [], sensations: "Bien" }];
   const { entries: strengthSets, byActivity: strengthByActivity } = generateStrengthSets(acts);
+  // Sesión de HIIT ya hecha hoy (después de generar las series para no alterar el resto del ejemplo)
+  const todayAct = demoToday(today, streams);
+  acts.unshift(todayAct);
   return {
     bundle: {
       profile, activities: acts, wellness: generateWellness(today, acts), measurements: generateMeasurements(today),
       checkins, planned, feedback: {}, connection: null, syncRuns: [], photoEntries: [], coachMessages: [],
-      strengthSets,
+      strengthSets, workouts: [], wodReady: true, blockResults: [], resultsReady: true,
     },
     streams,
     strengthByActivity,
@@ -227,12 +250,56 @@ export class DemoRepo implements Repo {
   }
 
   async loadAll(): Promise<DataBundle> {
-    return structuredClone({ ...this.bundle });
+    // Las series se derivan del estado actual para que la evolución refleje lo guardado en la demo
+    const dateOf = new Map(this.bundle.activities.map((a) => [a.id, a.local_date]));
+    const strengthSets: StrengthEntry[] = [];
+    for (const [actId, sets] of this.sets) {
+      const date = dateOf.get(actId);
+      if (date) sets.forEach((s, i) => strengthSets.push({ ...s, id: s.id ?? `${actId}-${i}`, date, activity_id: actId }));
+    }
+    return structuredClone({ ...this.bundle, strengthSets });
   }
   async getStreams(id: string) { return this.streams.get(id) ?? null; }
-  async getStrengthSets(id: string) { return this.sets.get(id) ?? []; }
-  async saveStrengthSets(id: string, sets: StrengthSet[]) { this.sets.set(id, sets); }
+  async getStrengthSets(id: string) { return structuredClone(this.sets.get(id) ?? []); }
+  async saveStrengthSets(id: string, sets: StrengthSet[]) { this.sets.set(id, structuredClone(sets).map((s, i) => ({ ...s, id: s.id ?? nid(`set${i}`) }))); }
   async saveFeedback(fb: Feedback) { this.bundle.feedback[fb.activity_id] = fb; }
+  async saveSession(activityId: string, payload: { feedback: Feedback | null; sets: StrengthSet[]; results: BlockResult[] }) {
+    // Igual que en la base de datos: todo o nada
+    const next = structuredClone(this.bundle.blockResults);
+    for (const r of payload.results) {
+      const w = this.bundle.workouts.find((x) => x.id === r.workout_id);
+      if (!w || w.activity_id !== activityId) throw new Error("Un resultado no corresponde a un WOD de esta actividad");
+      const i = next.findIndex((x) => x.workout_id === r.workout_id && x.block_ref === r.block_ref);
+      if (i >= 0) next[i] = structuredClone(r); else next.push(structuredClone(r));
+    }
+    for (const s of payload.sets) {
+      if (s.load_mode === "por_implemento" && !s.implements) throw new Error("«Por implemento» necesita el número de implementos");
+    }
+    this.bundle.blockResults = next;
+    if (payload.feedback) this.bundle.feedback[activityId] = structuredClone(payload.feedback);
+    await this.saveStrengthSets(activityId, payload.sets);
+  }
+  async saveWorkout(draft: WorkoutDraft, supersede: string[] = []) {
+    const existing = this.bundle.workouts.find((w) => w.client_ref === draft.client_ref);
+    if (existing) return structuredClone(existing);
+    const w: Workout = { ...structuredClone(draft), id: nid("wod"), superseded_at: null, created_at: new Date().toISOString() };
+    this.bundle.workouts.push(w);
+    const now = new Date().toISOString();
+    for (const x of this.bundle.workouts) if (supersede.includes(x.id) && x.id !== w.id && !x.superseded_at) x.superseded_at = now;
+    return structuredClone(w);
+  }
+  async updateWorkout(id: string, patch: Partial<Pick<Workout, "title" | "wod_date" | "modality" | "spec">>) {
+    const w = this.bundle.workouts.find((x) => x.id === id);
+    if (w) Object.assign(w, structuredClone(patch));
+  }
+  async linkWorkout(id: string, link: { activity_id: string | null; planned_session_id: string | null }) {
+    const w = this.bundle.workouts.find((x) => x.id === id);
+    if (w) Object.assign(w, link);
+  }
+  async setWorkoutArchived(id: string, archived: boolean) {
+    const w = this.bundle.workouts.find((x) => x.id === id);
+    if (w) w.superseded_at = archived ? new Date().toISOString() : null;
+  }
   async setCategoryOverride(id: string, category: Sport | null) {
     const a = this.bundle.activities.find((x) => x.id === id);
     if (!a) return;

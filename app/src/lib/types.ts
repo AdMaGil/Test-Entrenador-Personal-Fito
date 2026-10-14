@@ -1,3 +1,5 @@
+import type { WodSpec } from "./wod";
+
 export type Sport = "hiit" | "emtb" | "mtb" | "run" | "otro";
 export type PlanCategory = Sport | "descanso";
 export type Intensity = "suave" | "moderada" | "alta";
@@ -144,12 +146,73 @@ export interface StrengthSet {
   weight_kg: number | null;
   duration_s: number | null;
   notes: string | null;
+  /** «pendiente» = falta un dato (p. ej. el peso venía como «revisar»). Ausente en filas antiguas = realizado. */
+  status?: "realizado" | "pendiente";
+  /** Enlace opcional con el WOD importado y su bloque/ejercicio. */
+  workout_id?: string | null;
+  block_ref?: string | null;
+  item_ref?: string | null;
+  /** Nombre tal como llegó al importar, si después se corrige la asociación. */
+  exercise_original?: string | null;
+  /**
+   * Interpretación de la carga. NULL = sin aclarar (series antiguas): no se reinterpreta.
+   * weight_kg es la carga externa TOTAL cuando load_mode es «total» o «por_implemento».
+   */
+  load_mode?: LoadMode | null;
+  implements?: number | null;
+  load_per_implement_kg?: number | null;
+  reps_scope?: "total" | "por_lado" | null;
+  distance_m?: number | null;
+  calories?: number | null;
 }
+
+export type LoadMode = "total" | "por_implemento" | "sin_carga";
+
+/** Métricas de resultado de un bloque. NULL = desconocido. */
+export interface ResultMetrics {
+  time_s?: number | null;
+  rounds?: number | null;
+  reps?: number | null;
+  calories?: number | null;
+  distance_m?: number | null;
+}
+
+/** Lo realizado en un bloque del WOD (separado de lo previsto). status NULL = pendiente. */
+export interface BlockResult {
+  workout_id: string;
+  block_ref: string;
+  status: "realizado" | "no_realizado" | null;
+  /** En parejas: mi contribución (vacía = desconocida). En individual: mi resultado. */
+  personal: ResultMetrics;
+  /** Solo en parejas: resultado del equipo. Nunca se reparte automáticamente. */
+  team: ResultMetrics;
+  rpe: number | null;
+  adaptations: string | null;
+  notes: string | null;
+}
+
+/** WOD importado: describe el entrenamiento PREVISTO, no lo realizado. */
+export interface Workout {
+  id: string;
+  client_ref: string;
+  activity_id: string | null;
+  planned_session_id: string | null;
+  title: string | null;
+  wod_date: string | null;
+  modality: "individual" | "parejas" | null;
+  spec: WodSpec;
+  source_text: string | null;
+  superseded_at: string | null;
+  created_at: string;
+}
+
+export type WorkoutDraft = Pick<Workout, "client_ref" | "activity_id" | "planned_session_id" | "title" | "wod_date" | "modality" | "spec" | "source_text">;
 
 /** Una serie de fuerza con la fecha de la sesión a la que pertenece (actividad o sesión planificada). */
 export interface StrengthEntry extends StrengthSet {
   id: string;
   date: string;
+  activity_id?: string | null;
 }
 
 export interface Units {
@@ -166,6 +229,11 @@ export interface Profile {
   theme: "dark" | "light" | "system";
   goals: string | null;
   weight_goal_kg: number | null;
+  /** Objetivos del panel Hoy (migración 20261013100000; ausentes si no está aplicada). */
+  weight_goal_date?: string | null;
+  active_kcal_goal?: number | null;
+  sessions_week_goal?: number | null;
+  sleep_goal_h?: number | null;
   hr_max_bpm: number | null;
   available_days: number[];
   session_minutes_default: number | null;
@@ -257,6 +325,12 @@ export interface DataBundle {
   photoEntries: PhotoEntry[];
   coachMessages: CoachMessage[];
   strengthSets: StrengthEntry[];
+  workouts: Workout[];
+  blockResults: BlockResult[];
+  /** false si la migración de resultados (Entrega 2) aún no está aplicada. */
+  resultsReady: boolean;
+  /** false si la base de datos aún no tiene la migración de WOD aplicada (la app sigue funcionando sin esa parte). */
+  wodReady: boolean;
 }
 
 export interface ParsedImport {

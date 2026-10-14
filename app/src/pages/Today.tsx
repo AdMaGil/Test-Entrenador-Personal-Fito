@@ -1,15 +1,18 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Icon } from "../components/icons";
 import { PageHead, SyncStatus } from "../components/Layout";
 import { ActivityRow, PlannedForm, SessionDetails, StructureBar, intensityLabel, newDraft } from "../components/Sessions";
-import { Card, Empty, Field, Modal, OriginBadge, Scale, SportChip, Stat } from "../components/ui";
+import { Card, Empty, Field, Modal, Scale, SportChip, Stat } from "../components/ui";
+import { WodImportModal } from "../components/WodImport";
+import { DoneToday, GoalsModal, GoalsRow, RecoveryCard, WeightGoalCard } from "../components/Dashboard";
+import { activityPending, activityWodInfo, describePending, hasPending, unlinkedWorkouts } from "../lib/pending";
 import { useApp } from "../data/AppData";
 import { suggestToday, type Suggestion } from "../lib/coach";
 import { addDays, diffDays, dowShort, fmtDay, fmtDayLong, weekDays } from "../lib/dates";
-import { fmtDuration, fmtNum, fmtWeight, isNum } from "../lib/format";
+import { fmtDuration, fmtNum, isNum } from "../lib/format";
 import {
-  consecutiveHardDays, inRange, lastWith, personalBaseline, realWeights, summarize, weekSummary, weightTrend,
+  consecutiveHardDays, inRange, personalBaseline, realWeights, summarize, weekSummary,
 } from "../lib/metrics";
 import { SPORT_SHORT, SPORTS, sportColor } from "../lib/sports";
 import type { Checkin, PlannedDraft, PlannedSession, Sport } from "../lib/types";
@@ -51,7 +54,7 @@ function CheckinCard() {
   );
 }
 
-function TodayHero({ s, onAdapt }: { s: Suggestion; onAdapt: (o: Parameters<typeof suggestToday>[1]) => void }) {
+function TodayHero({ s, onAdapt, optional = false }: { s: Suggestion; onAdapt: (o: Parameters<typeof suggestToday>[1]) => void; optional?: boolean }) {
   const { theme, run, today } = useApp();
   const [view, setView] = useState(false);
   const [edit, setEdit] = useState<PlannedDraft | null>(null);
@@ -77,7 +80,7 @@ function TodayHero({ s, onAdapt }: { s: Suggestion; onAdapt: (o: Parameters<type
       <span className="hero-rail" style={{ background: sportColor(ses.category, theme) }} />
       <div className="hero-inner">
         <div className="row between">
-          <span className="small muted">Tu entrenamiento de hoy</span>
+          <span className="small muted">{optional ? (isPlanned ? "También planificada hoy" : "Opcional: otra sesión") : "Tu entrenamiento de hoy"}</span>
           <span className="row" style={{ gap: 6 }}>
             <SportChip cat={ses.category} />
             <span className={`badge ${isPlanned ? "" : "estimado"}`}>{isPlanned ? "Planificada" : "Sugerencia por reglas · sin añadir"}</span>
@@ -125,9 +128,13 @@ function TodayHero({ s, onAdapt }: { s: Suggestion; onAdapt: (o: Parameters<type
 }
 
 export default function Today() {
-  const { data, today, units, tz, theme, mode } = useApp();
+  const { data, today, tz, theme, mode } = useApp();
   const [filter, setFilter] = useState<Sport | "todos">("todos");
   const [overrides, setOverrides] = useState<Parameters<typeof suggestToday>[1]>({});
+  const [pastingWod, setPastingWod] = useState(false);
+  const [editGoals, setEditGoals] = useState(false);
+  const [showSuggestion, setShowSuggestion] = useState(false);
+  const nav = useNavigate();
 
   const acts = useMemo(() => (filter === "todos" ? data.activities : data.activities.filter((a) => a.category === filter)), [data.activities, filter]);
   const suggestion = useMemo(() => suggestToday({ today, profile: data.profile, activities: data.activities, wellness: data.wellness,
@@ -139,8 +146,8 @@ export default function Today() {
   const avgLoad = prevLoads.length ? prevLoads.reduce((a, b) => a + b, 0) / prevLoads.length : null;
   const weights = realWeights(data.measurements);
   const lastW = weights[weights.length - 1];
-  const trend = weightTrend(data.measurements);
-  const sleep = lastWith(data.wellness, "sleep_secs", today);
+  const doneToday = data.activities.filter((a) => a.local_date === today)
+    .sort((a, b) => (a.start_time ?? "").localeCompare(b.start_time ?? ""));
   const hrv = personalBaseline(data.wellness, "hrv", today);
   const plannedWeek = data.planned.filter((p) => p.date >= week.start && p.date <= addDays(week.start, 6) && p.category !== "descanso"
     && (p.status === "planificada" || p.status === "completada"));
@@ -166,15 +173,32 @@ export default function Today() {
     if (!p?.goals) setupPending.push("escribir tus objetivos");
   }
 
-  // Acceso directo a registrar el WOD de hoy sin tener que buscarlo en Actividades.
-  const todaysWod = data.activities.find((a) => a.local_date === today && (a.category === "hiit" || a.category === "otro"));
+  // Registro pendiente: solo lo explícitamente pendiente (bloques sin resultado o series por completar).
+  // Una actividad sin series (bici, carrera…) no se considera incompleta.
+  const pendingActs = data.activities
+    .filter((a) => a.local_date >= addDays(today, -30))
+    .map((a) => ({ a, p: activityPending(data, a.id) }))
+    .filter((x) => hasPending(x.p))
+    .sort((x, y) => y.a.local_date.localeCompare(x.a.local_date) || (y.a.start_time ?? "").localeCompare(x.a.start_time ?? ""));
+  // Lo de hoy ya se ve en «Hecho hoy»: el aviso superior es para días anteriores
+  const latestPending = pendingActs.find((x) => x.a.local_date !== today);
+  const unlinked = unlinkedWorkouts(data);
 
   return (
     <>
-      {todaysWod && (
-        <div className="card pad row between" style={{ marginBottom: 14 }}>
-          <span className="status ok"><Icon name="check" />Tienes un entrenamiento de hoy — registra series y pesos antes de que se te olvide.</span>
-          <Link className="btn sm primary" to={`/actividades/${todaysWod.id}`}>Registrar WOD de hoy</Link>
+      {latestPending && (
+        <div className="card pad row between touch" style={{ marginBottom: 14 }}>
+          <span className="stack" style={{ gap: 2 }}>
+            <span className="pending-flag"><Icon name="alert" />Registro pendiente: {activityWodInfo(data, latestPending.a.id).title || latestPending.a.name || "actividad"} · {fmtDay(latestPending.a.local_date)}</span>
+            <span className="small muted">{describePending(latestPending.p)}{pendingActs.filter((x) => x.a.local_date !== today).length > 1 ? ` · y ${pendingActs.filter((x) => x.a.local_date !== today).length - 1} actividad(es) más con datos pendientes` : ""}</span>
+          </span>
+          <Link className="btn sm primary" to={`/actividades/${latestPending.a.id}`}>Completar registro</Link>
+        </div>
+      )}
+      {unlinked.length > 0 && (
+        <div className="card pad row between touch" style={{ marginBottom: 14 }}>
+          <span className="status info"><Icon name="info" />{unlinked.length === 1 ? `El WOD «${unlinked[0].title ?? "sin nombre"}» está` : `${unlinked.length} WOD están`} importado(s) sin actividad. Vincúlalo desde el detalle de la actividad cuando la tengas.</span>
+          <Link className="btn sm" to="/actividades">Ir a Actividades</Link>
         </div>
       )}
       {setupPending.length > 0 && (
@@ -185,6 +209,8 @@ export default function Today() {
       )}
       <PageHead title="Hoy" sub={<span className="row" style={{ gap: 12 }}><span>{fmtDayLong(today)}</span><SyncStatus /></span>}
         actions={
+          <>
+          <button className="btn primary" onClick={() => setPastingWod(true)}><Icon name="plus" />Pegar WOD</button>
           <div className="row" style={{ gap: 6 }} role="group" aria-label="Filtrar por deporte">
             <button className="chip" aria-pressed={filter === "todos"} onClick={() => setFilter("todos")}>Todos</button>
             {SPORTS.filter((s) => s !== "otro").map((s) => (
@@ -193,11 +219,30 @@ export default function Today() {
               </button>
             ))}
           </div>
+          </>
         } />
 
       <div className="split">
         <div className="stack">
-          <TodayHero s={suggestion} onAdapt={setOverrides} />
+          {doneToday.length > 0 ? (
+            <>
+              <DoneToday acts={doneToday} onPasteWod={() => setPastingWod(true)} />
+              {suggestion.session && (suggestion.kind === "planificada" || showSuggestion ? (
+                <TodayHero s={suggestion} onAdapt={setOverrides} optional />
+              ) : (
+                <div className="card pad row between optional-sug">
+                  <span className="small ink2">
+                    Ya has entrenado hoy. Las reglas proponen además <b>{suggestion.session.title}</b>
+                    {suggestion.session.duration_min ? ` · ${suggestion.session.duration_min} min` : ""}, sin tener en cuenta lo que ya has hecho.
+                  </span>
+                  <button className="btn ghost sm" onClick={() => setShowSuggestion(true)}>Ver sugerencia</button>
+                </div>
+              ))}
+            </>
+          ) : <TodayHero s={suggestion} onAdapt={setOverrides} />}
+
+          <GoalsRow onEdit={() => setEditGoals(true)} />
+          <WeightGoalCard />
 
           <div className="grid stats">
             <Stat label="Tiempo esta semana" value={week.sessions ? fmtDuration(week.timeS, { short: true }) : null}
@@ -206,12 +251,6 @@ export default function Today() {
               foot={plannedWeek.length ? `${week.plannedDone} del plan marcadas como completadas` : "Sin sesiones planificadas"} />
             <Stat label="Carga semanal" value={week.load !== null ? fmtNum(week.load) : null}
               foot={avgLoad !== null ? `Media últimas 4 semanas: ${fmtNum(avgLoad)}` : "Sin histórico para comparar"} />
-            <Stat label="Calorías de actividades" value={week.calories !== null ? fmtNum(week.calories) : null} unit="kcal"
-              badge={<OriginBadge origin="estimado" title="Estimación del dispositivo; no es el gasto total diario" />} foot="Solo actividades, esta semana" />
-            <Stat label="Último peso" value={lastW ? fmtWeight(lastW.weight_kg, units) : null}
-              foot={lastW ? `${fmtDay(lastW.measured_on)} · ${trend ? `${trend.deltaKg >= 0 ? "+" : "−"}${fmtNum(Math.abs(trend.deltaKg), 1)} kg desde el ${fmtDay(trend.fromDate)}` : "tendencia: datos insuficientes"}` : "Sin mediciones reales"} />
-            <Stat label="Sueño" value={sleep ? fmtDuration(sleep.sleep_secs, { short: true }) : null}
-              foot={sleep ? `Registrado el ${fmtDay(sleep.date)}${isNum(sleep.sleep_score) ? ` · puntuación ${fmtNum(sleep.sleep_score)}` : ""}` : "Sin datos de sueño recientes"} />
           </div>
 
           <Card title="Esta semana" action={<Link to="/calendario" className="btn ghost sm">Calendario<Icon name="chevron" /></Link>}>
@@ -247,6 +286,7 @@ export default function Today() {
         </div>
 
         <div className="stack">
+          <RecoveryCard />
           <CheckinCard />
           <Card title="Observaciones">
             {notes.length ? (
@@ -255,12 +295,14 @@ export default function Today() {
             <p className="tiny muted" style={{ marginTop: 8 }}>Son descripciones de tus datos, no conclusiones sobre sus causas.</p>
           </Card>
           <Card title="Actividades recientes" action={<Link to="/actividades" className="btn ghost sm">Todas<Icon name="chevron" /></Link>}>
-            {recent.length ? <div className="list" style={{ margin: "0 -16px -16px" }}>{recent.map((a) => <ActivityRow key={a.id} a={a} />)}</div>
+            {recent.length ? <div className="list" style={{ margin: "0 -16px -16px" }}>{recent.map((a) => { const w = activityWodInfo(data, a.id); const p = activityPending(data, a.id); return <ActivityRow key={a.id} a={a} wodTitle={w.title} tags={w.tags} pending={hasPending(p) ? describePending(p) : null} />; })}</div>
               : <Empty title="Sin actividades">Cuando se sincronicen o importes actividades aparecerán aquí.</Empty>}
           </Card>
         </div>
       </div>
       <p className="tiny muted" style={{ marginTop: 16 }}>Zona horaria: {tz}.</p>
+      {editGoals && <GoalsModal onClose={() => setEditGoals(false)} />}
+      {pastingWod && <WodImportModal onClose={() => setPastingWod(false)} onSaved={(id) => { if (id) nav(`/actividades/${id}`); }} />}
     </>
   );
 }

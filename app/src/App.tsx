@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
+import { createHashRouter, Navigate, Route, RouterProvider, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Empty, Loading } from "./components/ui";
 import { useApp } from "./data/AppData";
@@ -15,14 +15,22 @@ const Physique = lazy(() => import("./pages/Physique"));
 const Coach = lazy(() => import("./pages/Coach"));
 const Settings = lazy(() => import("./pages/Settings"));
 
+// Router «de datos» (mismas rutas que antes con HashRouter): permite avisar
+// antes de salir de una pantalla con cambios sin guardar (useBlocker).
+const router = createHashRouter([{ path: "*", element: <Shell /> }]);
+
 export default function App() {
-  const { status, error, repo, refresh, signOut } = useApp();
+  const { status, repo } = useApp();
 
   if (status === "sin-sesion" && !repo) return <Login />;
   if (status === "cargando" && !repo) return <Loading text="Comprobando sesión…" />;
 
+  return <RouterProvider router={router} />;
+}
+
+function Shell() {
+  const { status, error, refresh, signOut } = useApp();
   return (
-    <HashRouter>
       <Layout>
         {status === "cargando" ? <Loading text="Cargando tus datos…" /> : status === "error" ? (
           <Empty title="No se pudieron cargar los datos" action={<div className="row"><button className="btn" onClick={refresh}>Reintentar</button><button className="btn ghost" onClick={signOut}>Cerrar sesión</button></div>}>
@@ -46,6 +54,5 @@ export default function App() {
           </Suspense>
         )}
       </Layout>
-    </HashRouter>
   );
 }

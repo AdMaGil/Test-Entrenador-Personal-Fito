@@ -64,8 +64,10 @@ export function Legend({ series }: { series: Series[] }) {
 }
 
 export function LineChartBox<T extends object>({
-  data, xKey, series, height = 220, xFormat, yFormat, yDomain, refLine, bands, ariaLabel,
+  data, xKey, series, height = 220, xFormat, yFormat, yDomain, refLine, bands, ariaLabel, linear = false,
 }: {
+  /** Segmentos rectos y puntos siempre visibles (sin suavizado que sugiera valores intermedios). */
+  linear?: boolean;
   data: T[]; xKey: keyof T & string; series: Series[]; height?: number;
   xFormat?: (v: string | number) => string; yFormat?: (v: number, key: string) => string;
   yDomain?: [number | "auto" | "dataMin" | "dataMax", number | "auto" | "dataMin" | "dataMax"];
@@ -86,8 +88,8 @@ export function LineChartBox<T extends object>({
           {refLine && <ReferenceLine y={refLine.y} stroke={t.line} strokeDasharray="4 4" label={refLine.label ? { value: refLine.label, fill: t.axis, fontSize: 11, position: "insideTopLeft" } : undefined} />}
           <Tooltip cursor={{ stroke: t.line, strokeWidth: 1 }} content={<TooltipBox xFormat={xFormat} yFormat={yFormat} />} />
           {series.map((s) => (
-            <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2}
-              strokeDasharray={s.dashed ? "5 4" : undefined} dot={data.length <= 24 ? { r: 3, strokeWidth: 0, fill: s.color } : false}
+            <Line key={s.key} type={linear ? "linear" : "monotone"} dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2}
+              strokeDasharray={s.dashed ? "5 4" : undefined} dot={linear || data.length <= 24 ? { r: linear ? 4 : 3, strokeWidth: 0, fill: s.color } : false}
               activeDot={{ r: 5, stroke: t.surface, strokeWidth: 2 }} connectNulls isAnimationActive={false} />
           ))}
         </LineChart>

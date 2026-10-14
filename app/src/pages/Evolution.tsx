@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { IntensityMix, LineChartBox, StackedBars, ZoneBars, useChartTheme } from "../components/charts";
 import { PageHead } from "../components/Layout";
 import { Card, Field, OriginBadge, Segmented, Stat } from "../components/ui";
+import { Icon } from "../components/icons";
 import { useApp } from "../data/AppData";
 import { addDays, diffDays, fmtDay, rangeDays, startOfWeek } from "../lib/dates";
 import { fmtDuration, fmtNum, fmtSigned, isNum, pctChange } from "../lib/format";
-import { durationOf, exerciseNames, exerciseTrend, fitnessSeries, inRange, previousPeriod, summarize, type Period } from "../lib/metrics";
-import { fmtWeight } from "../lib/format";
+import { durationOf, fitnessSeries, inRange, previousPeriod, summarize, type Period } from "../lib/metrics";
+import { compareLastTwo, describeSet, exerciseCatalog, exerciseSessions, sessionPoints, type Comparison } from "../lib/exercises";
+import { fmtKg } from "../lib/loads";
 import { isBike, SPORT_LABEL, SPORT_SHORT, SPORTS, sportColor } from "../lib/sports";
 import type { Activity, Sport } from "../lib/types";
 
@@ -32,16 +35,13 @@ const METRICS: Record<string, { label: string; get: (a: Activity, rpe?: number |
 };
 
 export default function Evolution() {
-  const { data, today, theme, units } = useApp();
+  const { data, today, theme } = useApp();
   const t = useChartTheme();
   const [range, setRange] = useState<Range>("28");
   const [cFrom, setCFrom] = useState(addDays(today, -60));
   const [cTo, setCTo] = useState(today);
   const [sport, setSport] = useState<Sport>("hiit");
   const [metric, setMetric] = useState("avg_hr");
-  const exercises = useMemo(() => exerciseNames(data.strengthSets), [data.strengthSets]);
-  const [exercise, setExercise] = useState(exercises[0] ?? "");
-  const strengthTrend = useMemo(() => exercise ? exerciseTrend(data.strengthSets, exercise) : [], [data.strengthSets, exercise]);
 
   const period: Period = range === "custom" ? { from: cFrom, to: cTo } : { from: addDays(today, -(Number(range) - 1)), to: today };
   const prevP = previousPeriod(period);
@@ -140,21 +140,7 @@ export default function Evolution() {
             {sport === "emtb" && <p className="chart-note">En e-MTB no se compara la velocidad ni la distancia como medida de forma: dependen de la asistencia del motor.</p>}
           </Card>
 
-          <Card title="Fuerza: evolución por ejercicio">
-            {exercises.length ? (
-              <>
-                <select className="input" style={{ width: "auto", marginBottom: 10 }} value={exercise} onChange={(e) => setExercise(e.target.value)} aria-label="Ejercicio">
-                  {exercises.map((ex) => <option key={ex} value={ex}>{ex}</option>)}
-                </select>
-                {strengthTrend.length ? (
-                  <LineChartBox data={strengthTrend} xKey="date" ariaLabel={`Peso en ${exercise}`} xFormat={(v) => fmtDay(String(v))}
-                    yFormat={(v) => fmtWeight(v, units)}
-                    series={[{ key: "weight_kg", label: "Peso", color: t.ok }]} />
-                ) : <p className="small muted">Sin registros de peso para este ejercicio.</p>}
-                <p className="chart-note">Peso máximo registrado por sesión (de las series que anotas en el detalle de cada actividad).</p>
-              </>
-            ) : <p className="small muted">Aún no has registrado series de fuerza. Añádelas desde el detalle de una actividad (botón «Añadir serie»).</p>}
-          </Card>
+          <StrengthEvolution />
         </div>
 
         <div className="stack">
@@ -192,5 +178,82 @@ export default function Evolution() {
         </div>
       </div>
     </>
+  );
+}
+
+type StrengthRange = "90" | "365" | "todo";
+
+function ComparisonText({ c }: { c: Comparison }) {
+  if (c.kind === "insuficiente") return <p className="small muted">{c.message}</p>;
+  if (c.kind === "solo_carga") {
+    return <p className="small">Carga usada: <span className="num">{fmtKg(c.prevKg)} kg</span> el {fmtDay(c.prevDate)} → <span className="num">{fmtKg(c.lastKg)} kg</span> el {fmtDay(c.lastDate)}. <span className="muted">Sin repeticiones registradas no se valora si hay mejora.</span></p>;
+  }
+  if (c.kind === "mismas_reps") {
+    const reps = `${c.reps} reps${c.scope === "por_lado" ? " por lado" : ""}`;
+    const verb = c.deltaKg > 0 ? `+${fmtKg(c.deltaKg)} kg` : c.deltaKg < 0 ? `−${fmtKg(Math.abs(c.deltaKg))} kg` : "misma carga";
+    return (
+      <p className="small">A <b>{reps}</b>: <span className="num">{fmtKg(c.prevKg)} kg</span> el {fmtDay(c.prevDate)} → <span className="num">{fmtKg(c.lastKg)} kg</span> el {fmtDay(c.lastDate)} (<b>{verb}</b>).</p>
+    );
+  }
+  return (
+    <div className="small stack" style={{ gap: 2 }}>
+      <p>Las repeticiones no coinciden entre las dos últimas sesiones; se muestran ambas sin compararlas:</p>
+      <p className="ink2">{fmtDay(c.prevDate)}: {c.prev}</p>
+      <p className="ink2">{fmtDay(c.lastDate)}: {c.last}</p>
+    </div>
+  );
+}
+
+/** Evolución por ejercicio: solo series realizadas y con la carga resuelta entran en comparaciones y gráfica. */
+function StrengthEvolution() {
+  const { data, today } = useApp();
+  const t = useChartTheme();
+  const catalog = useMemo(() => exerciseCatalog(data.strengthSets.filter((s) => s.status !== "pendiente")), [data.strengthSets]);
+  const [key, setKey] = useState("");
+  const [range, setRange] = useState<StrengthRange>("365");
+  const selected = catalog.find((c) => c.key === key) ?? [...catalog].sort((a, b) => b.sessions - a.sessions)[0];
+  const from = range === "todo" ? undefined : addDays(today, -(Number(range) - 1));
+  const sessions = useMemo(() => (selected ? exerciseSessions(data.strengthSets, selected.key, { from }) : []), [data.strengthSets, selected, from]);
+  const points = sessionPoints(sessions);
+  const cmp = compareLastTwo(sessions);
+  const excluded = sessions.filter((s) => s.ambiguous).length;
+
+  return (
+    <Card title="Fuerza: evolución por ejercicio">
+      {catalog.length ? (
+        <div className="stack" style={{ gap: 12 }}>
+          <div className="row">
+            <select className="input" style={{ width: "auto", maxWidth: "100%" }} value={selected?.key ?? ""} onChange={(e) => setKey(e.target.value)} aria-label="Ejercicio">
+              {catalog.map((c) => <option key={c.key} value={c.key}>{c.name} ({c.sessions})</option>)}
+            </select>
+            <Segmented label="Periodo de fuerza" value={range} onChange={setRange}
+              options={[{ value: "90", label: "90 días" }, { value: "365", label: "1 año" }, { value: "todo", label: "Todo" }]} />
+          </div>
+          {!(cmp.kind === "insuficiente" && points.length === 1) && <ComparisonText c={cmp} />}
+          {points.length >= 2 ? (
+            <LineChartBox linear data={points} xKey="date" ariaLabel={`Carga en ${selected?.name}`} xFormat={(v) => fmtDay(String(v))}
+              yFormat={(v) => `${fmtKg(v)} kg`} series={[{ key: "kg", label: "Carga máxima resuelta", color: t.ok }]} />
+          ) : points.length === 1 ? <p className="small muted">Solo hay una sesión con la carga resuelta. Registra otra sesión para comparar.</p> : null}
+          {points.length >= 2 && <p className="chart-note">Cada punto es una sesión real: la mayor carga externa total entre sus series realizadas y resueltas. Léela junto a las repeticiones de la tabla; no estima 1RM.</p>}
+          {excluded > 0 && <p className="small"><span className="pending-flag"><Icon name="alert" />{excluded} sesión(es) con carga sin aclarar o incompleta</span> no entran en la gráfica ni en la comparación.</p>}
+          {sessions.length > 0 && (
+            <div className="table-wrap">
+              <table className="data">
+                <thead><tr><th>Sesión</th><th>Series realizadas</th></tr></thead>
+                <tbody>
+                  {sessions.slice(0, 8).map((s) => (
+                    <tr key={`${s.date}${s.activityId}`}>
+                      <td style={{ whiteSpace: "nowrap" }}>{s.activityId ? <Link to={`/actividades/${s.activityId}`}>{fmtDay(s.date)}</Link> : fmtDay(s.date)}</td>
+                      <td>{s.sets.map(describeSet).join(" ; ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {!sessions.length && <p className="small muted">Sin series de este ejercicio en el periodo.</p>}
+        </div>
+      ) : <p className="small muted">Aún no has registrado series de fuerza. Añádelas desde el detalle de una actividad.</p>}
+    </Card>
   );
 }
