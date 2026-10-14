@@ -215,6 +215,11 @@ export interface Profile {
   theme: "dark" | "light" | "system";
   goals: string | null;
   weight_goal_kg: number | null;
+  /** Objetivos del panel Hoy (migración 20261013100000; ausentes si no está aplicada). */
+  weight_goal_date?: string | null;
+  active_kcal_goal?: number | null;
+  sessions_week_goal?: number | null;
+  sleep_goal_h?: number | null;
   hr_max_bpm: number | null;
   available_days: number[];
   session_minutes_default: number | null;

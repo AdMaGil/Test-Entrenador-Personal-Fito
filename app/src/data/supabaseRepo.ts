@@ -268,7 +268,12 @@ export class SupabaseRepo implements Repo {
   async saveProfile(p: Partial<Profile>): Promise<void> {
     const { user_id: _ignored, ...rest } = p;
     void _ignored;
-    must(await this.sb.from("profiles").upsert({ user_id: this.userId, ...rest }, { onConflict: "user_id" }));
+    const res = await this.sb.from("profiles").upsert({ user_id: this.userId, ...rest }, { onConflict: "user_id" });
+    // Objetivos nuevos sin la migración aplicada: mensaje claro en lugar del error técnico
+    if (res.error && /weight_goal_date|active_kcal_goal|sessions_week_goal|sleep_goal_h/.test(res.error.message ?? "")) {
+      throw new Error("Falta aplicar la migración de objetivos (20261013100000_objetivos) en la base de datos.");
+    }
+    must(res);
   }
 
   async enableConnection(syncFrom: string | null): Promise<void> {

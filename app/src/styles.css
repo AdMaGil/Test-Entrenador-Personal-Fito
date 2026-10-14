@@ -511,3 +511,40 @@ details.disclosure[open] > summary .chev { transform: rotate(90deg); }
 .ref-line.highlight { color: var(--ink); }
 .ref-line.highlight .tag-ref { color: var(--warn); }
 @media (max-width: 420px) { .quick-load { grid-template-columns: minmax(0, 1fr); } .quick-weight { align-items: flex-start; } }
+
+/* ---------------------------------------------------------------------
+   Panel Hoy: hecho hoy, objetivos y recuperación
+   --------------------------------------------------------------------- */
+.done-today { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.done-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.eyebrow.ok { color: var(--ok); }
+.eyebrow .ico { width: 15px; height: 15px; }
+.done-item { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 12px 17px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+.done-title { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.done-metrics { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; }
+.done-metrics b { font-size: 17px; font-weight: 500; }
+.optional-sug { gap: 10px; border-style: dashed; }
+.optional-sug > span { flex: 1 1 200px; }
+
+.goals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+@media (max-width: 520px) { .goals { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+.goal { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.goal-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.goal-label { font-size: 12px; color: var(--ink-3); }
+.goal-main { font-size: 14px; font-weight: 500; }
+.goal-foot { font-size: 12px; color: var(--ink-3); }
+.ring { position: relative; flex: none; }
+.ring svg { display: block; }
+.ring-center { position: absolute; inset: 0; display: flex; align-items: baseline; justify-content: center; padding-top: calc(50% - 11px); gap: 1px; }
+.ring-val { font-size: 16px; font-weight: 500; letter-spacing: -0.02em; }
+.ring-unit { font-size: 10.5px; color: var(--ink-3); }
+.goal-note { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.goal-note .ico { width: 15px; height: 15px; display: inline-block; vertical-align: -2px; margin-right: 4px; }
+
+.recovery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.rec { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); min-width: 0; }
+.rec.warn { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+.rec.ok { border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+.rec-val { font-size: 20px; font-weight: 500; letter-spacing: -0.02em; }
+.linkish { background: none; border: 0; padding: 0; color: var(--ink); text-decoration: underline; cursor: pointer; }
