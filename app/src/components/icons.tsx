@@ -28,6 +28,7 @@ const paths = {
   bolt: "M13 3 5 14h6l-1 7 8-11h-6l1-7Z",
   clock: "M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z",
   scale: "M5 20h14M7 20l1-12h8l1 12M12 4v4M9 4h6",
+  route: "M4 19l5-9 4 6 3-5 4 8M5 9a1.6 1.6 0 1 0 0-3.2A1.6 1.6 0 0 0 5 9ZM19 11a1.6 1.6 0 1 0 0-3.2A1.6 1.6 0 0 0 19 11Z",
 } as const;
 
 export type IconName = keyof typeof paths;

@@ -548,3 +548,22 @@ details.disclosure[open] > summary .chev { transform: rotate(90deg); }
 .rec.ok { border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
 .rec-val { font-size: 20px; font-weight: 500; letter-spacing: -0.02em; }
 .linkish { background: none; border: 0; padding: 0; color: var(--ink); text-decoration: underline; cursor: pointer; }
+
+/* --------------------------------------------------------------------
+   Rutas (MTB / e-MTB)
+   -------------------------------------------------------------------- */
+.route-table { display: flex; flex-direction: column; }
+.route-row {
+  display: grid; grid-template-columns: 112px minmax(0, 1.6fr) 86px 80px 76px 86px 70px;
+  gap: 10px; align-items: center; padding: 9px 2px; border-bottom: 1px solid var(--line);
+  text-decoration: none; color: inherit;
+}
+.route-row:last-child { border-bottom: none; }
+.route-row:not(.route-head):hover { background: var(--surface-2); }
+.route-head { font-weight: 500; padding-bottom: 6px; }
+.route-row .num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .route-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; padding: 10px 4px; }
+  .route-head { display: none; }
+  .route-row > span:nth-child(2) { grid-column: 1 / -1; }
+}

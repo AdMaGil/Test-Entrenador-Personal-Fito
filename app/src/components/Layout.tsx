@@ -12,6 +12,7 @@ const NAV: { to: string; label: string; icon: IconName; mobile?: boolean }[] = [
   { to: "/calendario", label: "Calendario", icon: "calendar", mobile: true },
   { to: "/actividades", label: "Actividades", icon: "list", mobile: true },
   { to: "/evolucion", label: "Entrenamiento", icon: "chart" },
+  { to: "/rutas", label: "Rutas MTB / e-MTB", icon: "route" },
   { to: "/salud", label: "Salud y recuperación", icon: "heart", mobile: true },
   { to: "/fisico", label: "Físico", icon: "camera" },
   { to: "/entrenador", label: "Mi entrenador", icon: "coach" },
