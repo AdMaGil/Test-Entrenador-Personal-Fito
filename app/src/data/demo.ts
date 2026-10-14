@@ -343,6 +343,18 @@ export class DemoRepo implements Repo {
   async addMeasurement(m: Omit<Measurement, "id" | "last_synced_at">) {
     this.bundle.measurements.push({ ...m, id: nid("meas"), last_synced_at: null });
   }
+  async importMeasurements(rows: Omit<Measurement, "id" | "last_synced_at">[]) {
+    const have = new Set(this.bundle.measurements.map((m) => `${m.source}|${m.external_id ?? ""}`));
+    let n = 0;
+    for (const r of rows) {
+      const k = `${r.source}|${r.external_id ?? ""}`;
+      if (have.has(k)) continue;
+      have.add(k);
+      this.bundle.measurements.push({ ...r, id: nid("meas"), last_synced_at: null });
+      n++;
+    }
+    return n;
+  }
   async deleteMeasurement(id: string) { this.bundle.measurements = this.bundle.measurements.filter((m) => m.id !== id); }
   async saveProfile(p: Partial<Profile>) { this.bundle.profile = { ...(this.bundle.profile as Profile), ...p }; }
   async enableConnection() { throw new Error("En modo demostración no se pueden conectar cuentas reales."); }

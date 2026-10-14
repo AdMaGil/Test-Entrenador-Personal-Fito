@@ -111,8 +111,30 @@ export function weekSummary(acts: Activity[], planned: PlannedSession[], anyDay:
 // ---------------------------------------------------------------------------
 // Peso: solo mediciones reales
 // ---------------------------------------------------------------------------
+/**
+ * Una medición por día, sin duplicados entre orígenes:
+ *   * Una pesada de Intervals que coincide (mismo día, ±0,1 kg) con una de Feelfit
+ *     es la misma medición: se usa la de Feelfit (trae composición). La de Intervals
+ *     no se borra; solo queda fuera de los cálculos.
+ *   * Si un día hay varias pesadas, cuenta una: la manual si existe; si no, la última
+ *     de Feelfit (como hacía Intervals); si no, la de Intervals.
+ */
+export function dailyMeasurements(meas: Measurement[]): Measurement[] {
+  const feelfitByDay = new Map<string, Measurement[]>();
+  for (const m of meas) if (m.source === "feelfit") feelfitByDay.set(m.measured_on, [...(feelfitByDay.get(m.measured_on) ?? []), m]);
+  const rank = (m: Measurement) => (m.source === "manual" ? 3 : m.source === "feelfit" ? 2 : 1);
+  const byDay = new Map<string, Measurement>();
+  for (const m of meas) {
+    if (m.source === "intervals" && isNum(m.weight_kg)
+      && (feelfitByDay.get(m.measured_on) ?? []).some((f) => isNum(f.weight_kg) && Math.abs((f.weight_kg as number) - (m.weight_kg as number)) <= 0.1 + 1e-9)) continue;
+    const cur = byDay.get(m.measured_on);
+    if (!cur || rank(m) > rank(cur) || (rank(m) === rank(cur) && (m.measured_at ?? "") > (cur.measured_at ?? ""))) byDay.set(m.measured_on, m);
+  }
+  return [...byDay.values()].sort((a, b) => a.measured_on.localeCompare(b.measured_on));
+}
+
 export function realWeights(meas: Measurement[]): Measurement[] {
-  return meas.filter((m) => isNum(m.weight_kg)).sort((a, b) => a.measured_on.localeCompare(b.measured_on));
+  return dailyMeasurements(meas.filter((m) => isNum(m.weight_kg)));
 }
 
 export interface WeightTrend {
@@ -156,11 +178,11 @@ export function nearestMeasurement(meas: Measurement[], date: string, maxDays = 
 }
 
 // ---------------------------------------------------------------------------
-// % de grasa corporal: solo mediciones reales (hoy, únicamente las que llegan
-// de Feel Fit vía Intervals.icu; la API no expone más métricas de la báscula).
+// % de grasa corporal: solo mediciones reales (de Feelfit, directamente desde su
+// export o vía Intervals.icu, que no expone el resto de métricas de la báscula).
 // ---------------------------------------------------------------------------
 export function realBodyFat(meas: Measurement[]): Measurement[] {
-  return meas.filter((m) => isNum(m.body_fat_pct)).sort((a, b) => a.measured_on.localeCompare(b.measured_on));
+  return dailyMeasurements(meas.filter((m) => isNum(m.body_fat_pct)));
 }
 
 export function nearestBodyFat(meas: Measurement[], date: string, maxDays = 3): Measurement | null {

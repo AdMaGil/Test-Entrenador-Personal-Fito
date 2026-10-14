@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { LineChartBox, StackedBars, useChartTheme } from "../components/charts";
 import { Icon } from "../components/icons";
 import { PageHead } from "../components/Layout";
-import { Card, Empty, Field, Modal, OriginBadge, Segmented } from "../components/ui";
+import { FeelfitImportModal } from "../components/FeelfitImport";
+import { Card, Empty, Field, Modal, OriginBadge, Segmented, Stat } from "../components/ui";
 import { useApp } from "../data/AppData";
 import { addDays, diffDays, fmtDay, fmtDayLong, startOfWeek } from "../lib/dates";
 import { fmtNum, fmtWeight, isNum } from "../lib/format";
 import { inRange, nearestBodyFat, nearestMeasurement, realBodyFat, realWeights, summarize } from "../lib/metrics";
 import { PHOTO_GUIDE, POSE_LABEL, POSES } from "../lib/photos";
-import type { Framing, PhotoEntry, PhotoFile, Pose } from "../lib/types";
+import type { Framing, Measurement, PhotoEntry, PhotoFile, Pose } from "../lib/types";
 
 function useSignedUrl(path: string | null | undefined) {
   const { repo } = useApp();
@@ -268,17 +269,78 @@ function Trends({ entries }: { entries: PhotoEntry[] }) {
   );
 }
 
+type CompKey = "muscle_mass_kg" | "skeletal_muscle_pct" | "fat_free_mass_kg" | "visceral_fat" | "subcutaneous_fat_pct"
+  | "body_water_pct" | "bone_mass_kg" | "bmr_kcal" | "metabolic_age";
+const COMPOSITION: { key: CompKey; label: string; unit: string; digits: number }[] = [
+  { key: "muscle_mass_kg", label: "Masa muscular", unit: "kg", digits: 1 },
+  { key: "skeletal_muscle_pct", label: "Músculo esquelético", unit: "%", digits: 1 },
+  { key: "fat_free_mass_kg", label: "Peso libre de grasa", unit: "kg", digits: 1 },
+  { key: "visceral_fat", label: "Grasa visceral", unit: "nivel", digits: 0 },
+  { key: "subcutaneous_fat_pct", label: "Grasa subcutánea", unit: "%", digits: 1 },
+  { key: "body_water_pct", label: "Agua corporal", unit: "%", digits: 1 },
+  { key: "bone_mass_kg", label: "Masa ósea", unit: "kg", digits: 2 },
+  { key: "bmr_kcal", label: "Metabolismo basal", unit: "kcal", digits: 0 },
+  { key: "metabolic_age", label: "Edad metabólica", unit: "años", digits: 0 },
+];
+
+/** Composición estimada por la báscula (Feelfit). Solo días con dato real; nunca se rellena. */
+function Composition({ onImport }: { onImport: () => void }) {
+  const { data, today } = useApp();
+  const t = useChartTheme();
+  const [metric, setMetric] = useState<CompKey>("muscle_mass_kg");
+  const [range, setRange] = useState<"365" | "1095" | "todo">("1095");
+  const withComp = data.measurements.filter((m) => m.source === "feelfit")
+    .sort((a, b) => (a.measured_at ?? a.measured_on).localeCompare(b.measured_at ?? b.measured_on));
+  if (!withComp.length) {
+    return <Empty title="Sin datos de composición" action={<button className="btn primary" onClick={onImport}><Icon name="upload" />Importar export de Feelfit</button>}>
+      Importa el export de Feelfit para ver masa muscular, grasa visceral, agua corporal y el resto de estimaciones de la báscula.</Empty>;
+  }
+  const last = withComp[withComp.length - 1];
+  const def = COMPOSITION.find((c) => c.key === metric) ?? COMPOSITION[0];
+  const from = range === "todo" ? "0000-00-00" : addDays(today, -Number(range));
+  // Una medición por día (la última), igual que las series de peso
+  const byDay = new Map<string, number>();
+  for (const m of withComp as Measurement[]) { const v = m[metric]; if (typeof v === "number" && m.measured_on >= from) byDay.set(m.measured_on, v); }
+  const series = [...byDay.entries()].map(([x, v]) => ({ x, v }));
+  return (
+    <div className="stack">
+      <p className="small ink2">Última medición: <b>{fmtDay(last.measured_on)} {last.measured_on.slice(0, 4)}</b> <OriginBadge origin="estimado" title="Estimación de la báscula por bioimpedancia" /></p>
+      <div className="grid stats">
+        {COMPOSITION.map((c) => {
+          const v = last[c.key];
+          return <Stat key={c.key} label={c.label} value={typeof v === "number" ? fmtNum(v, c.digits) : null} unit={c.unit === "nivel" ? undefined : c.unit} />;
+        })}
+      </div>
+      <div className="row">
+        <select className="input" style={{ width: "auto" }} value={metric} onChange={(e) => setMetric(e.target.value as CompKey)} aria-label="Métrica">
+          {COMPOSITION.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
+        <Segmented label="Periodo" value={range} onChange={setRange} options={[{ value: "365", label: "1 año" }, { value: "1095", label: "3 años" }, { value: "todo", label: "Todo" }]} />
+      </div>
+      {series.length >= 2 ? (
+        <LineChartBox data={series} xKey="x" ariaLabel={def.label} xFormat={(v) => `${fmtDay(String(v))} ${String(v).slice(2, 4)}`}
+          yFormat={(v) => `${fmtNum(v, def.digits)}${def.unit === "nivel" ? "" : ` ${def.unit}`}`} series={[{ key: "v", label: def.label, color: t.info }]} />
+      ) : <p className="small muted">Hacen falta al menos dos mediciones en el periodo.</p>}
+      <p className="chart-note">Son estimaciones de la báscula por bioimpedancia: varían con la hidratación, la hora y la comida. Compara tendencias en condiciones parecidas (p. ej. por la mañana), no valores sueltos. Los días sin medición no se rellenan.</p>
+    </div>
+  );
+}
+
 export default function Physique() {
   const { data, run, repo, units } = useApp();
   const [editing, setEditing] = useState<PhotoEntry | null | "new">(null);
-  const [tab, setTab] = useState<"cronologia" | "comparar" | "tendencias">("cronologia");
+  const [tab, setTab] = useState<"cronologia" | "comparar" | "tendencias" | "composicion">("cronologia");
+  const [importing, setImporting] = useState(false);
   const entries = useMemo(() => [...data.photoEntries].sort((a, b) => b.taken_on.localeCompare(a.taken_on)), [data.photoEntries]);
   const fatFor = (date: string) => nearestBodyFat(data.measurements, date, 3);
 
   return (
     <>
       <PageHead title="Evolución física" sub="Fotografías privadas, peso y cintura en el tiempo"
-        actions={<button className="btn primary" onClick={() => setEditing("new")}><Icon name="camera" />Nuevo registro</button>} />
+        actions={<>
+          <button className="btn" onClick={() => setImporting(true)}><Icon name="upload" />Importar Feelfit</button>
+          <button className="btn primary" onClick={() => setEditing("new")}><Icon name="camera" />Nuevo registro</button>
+        </>} />
 
       <details className="card pad disclosure" style={{ marginBottom: 14 }}>
         <summary><Icon name="chevron" className="ico chev" />Guía para repetir las fotos en las mismas condiciones</summary>
@@ -289,7 +351,7 @@ export default function Physique() {
 
       <div style={{ marginBottom: 14 }}>
         <Segmented label="Sección" value={tab} onChange={setTab} options={[
-          { value: "cronologia", label: "Cronología" }, { value: "comparar", label: "Comparar" }, { value: "tendencias", label: "Tendencias" }]} />
+          { value: "cronologia", label: "Cronología" }, { value: "comparar", label: "Comparar" }, { value: "tendencias", label: "Tendencias" }, { value: "composicion", label: "Composición" }]} />
       </div>
 
       {tab === "cronologia" && (
@@ -325,11 +387,13 @@ export default function Physique() {
       )}
       {tab === "comparar" && <Card title="Comparar dos fechas"><Compare entries={entries} /></Card>}
       {tab === "tendencias" && <Card title="Peso, cintura y entrenamiento"><Trends entries={entries} /></Card>}
+      {tab === "composicion" && <Card title="Composición corporal (báscula)"><Composition onImport={() => setImporting(true)} /></Card>}
 
       <Card title="Comentar cambios visibles" className="" action={<span className="badge">No disponible</span>}>
         <p className="small ink2" style={{ marginTop: 4 }}>Función futura opcional: requiere configurar un proveedor de visión en el servidor. Está desactivada; ninguna foto se envía a servicios externos, y cuando exista solo se usará si la lanzas tú expresamente sobre las fotos que elijas.</p>
       </Card>
 
+      {importing && <FeelfitImportModal onClose={() => setImporting(false)} />}
       {editing && <EntryEditor entry={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
     </>
   );

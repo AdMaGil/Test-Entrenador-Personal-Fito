@@ -183,6 +183,28 @@ await expectError(
   "el usuario no puede insertar ejecuciones de sincronización",
 );
 
+console.log("Importación de Feelfit");
+await as(A, () => db.exec(`
+  insert into body_measurements (source, external_id, measured_on, measured_at, weight_kg, body_fat_pct, muscle_mass_kg, visceral_fat, bmr_kcal, metabolic_age, data_origin)
+  values ('feelfit', 'feelfit:2026-10-12 17:21:12', '2026-10-12', '2026-10-12T15:21:12Z', 79.6, 13.8, 65.2, 7, 1851, 44, 'medido')
+  on conflict (user_id, source, external_id) do nothing;
+  insert into body_measurements (source, external_id, measured_on, measured_at, weight_kg, data_origin)
+  values ('feelfit', 'feelfit:2026-10-12 17:21:12', '2026-10-12', '2026-10-12T15:21:12Z', 79.6, 'medido')
+  on conflict (user_id, source, external_id) do nothing;
+`));
+const ff = (await as(A, () => db.query(`select count(*)::int as n, max(bmr_kcal) as bmr from body_measurements where source = 'feelfit'`))).rows[0];
+ok(ff.n === 1 && ff.bmr === 1851, "se guarda el origen feelfit con su composición y reimportar no duplica");
+await expectError(
+  () => as(A, () => db.exec(`insert into body_measurements (source, external_id, measured_on, weight_kg, visceral_fat, data_origin) values ('feelfit', 'feelfit:x', '2026-10-01', 80, 0, 'medido')`)),
+  "un 0 en una métrica de composición se rechaza (debe ser NULL)",
+);
+await expectError(
+  () => as(A, () => db.exec(`insert into body_measurements (source, external_id, measured_on, weight_kg, data_origin) values ('otro', 'x', '2026-10-01', 80, 'medido')`)),
+  "solo se admiten los orígenes conocidos",
+);
+const bFF = (await as(B, () => db.query(`select count(*)::int as n from body_measurements where source = 'feelfit'`))).rows[0].n;
+ok(bFF === 0, "B no ve las mediciones de Feelfit de A");
+
 // --- Objetivos del panel Hoy ---------------------------------------------
 console.log("Objetivos");
 const og = await db.query(`select weight_goal_date, active_kcal_goal, sessions_week_goal, sleep_goal_h from profiles where user_id = '${A}'`);
