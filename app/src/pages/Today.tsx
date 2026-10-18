@@ -19,6 +19,15 @@ import type { Checkin, PlannedDraft, PlannedSession, Sport } from "../lib/types"
 
 const SORENESS = ["ninguna", "lumbar", "rodillas", "hombros", "cuello", "cadera", "gemelos", "otra"];
 
+/** Saludo según la hora local (zona horaria del perfil), sin inventar nada: solo franjas horarias. */
+function greeting(tz: string): string {
+  const hour = Number(new Intl.DateTimeFormat("es-ES", { hour: "numeric", hour12: false, timeZone: tz }).format(new Date()));
+  if (hour < 6) return "Buenas noches";
+  if (hour < 13) return "Buenos días";
+  if (hour < 20) return "Buenas tardes";
+  return "Buenas noches";
+}
+
 function CheckinCard() {
   const { data, today, run } = useApp();
   const existing = data.checkins.find((c) => c.date === today);
@@ -183,6 +192,8 @@ export default function Today() {
   // Lo de hoy ya se ve en «Hecho hoy»: el aviso superior es para días anteriores
   const latestPending = pendingActs.find((x) => x.a.local_date !== today);
   const unlinked = unlinkedWorkouts(data);
+  const firstName = p?.display_name?.trim().split(/\s+/)[0];
+  const heroTitle = firstName ? `${greeting(tz)}, ${firstName}` : "Hoy";
 
   return (
     <>
@@ -207,7 +218,7 @@ export default function Today() {
           <Link className="btn sm" to="/ajustes">Ir a Ajustes</Link>
         </div>
       )}
-      <PageHead title="Hoy" sub={<span className="row" style={{ gap: 12 }}><span>{fmtDayLong(today)}</span><SyncStatus /></span>}
+      <PageHead title={heroTitle} sub={<span className="row" style={{ gap: 12 }}><span>{fmtDayLong(today)}</span><SyncStatus /></span>}
         actions={
           <>
           <button className="btn primary" onClick={() => setPastingWod(true)}><Icon name="plus" />Pegar WOD</button>
