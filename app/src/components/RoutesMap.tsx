@@ -19,8 +19,8 @@ export default function RoutesMap({ routes, height = 420 }: { routes: RouteLine[
       const L = await import("leaflet");
       if (cancelled || !ref.current || !routes.length) return;
       map = L.map(ref.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 18, attribution: "© OpenStreetMap",
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 18, attribution: "© OpenStreetMap, © CARTO", subdomains: "abcd",
       }).addTo(map);
       const lines: import("leaflet").Polyline[] = [];
       for (const r of routes) {
