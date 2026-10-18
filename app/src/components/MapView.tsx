@@ -10,8 +10,8 @@ export default function MapView({ points, color }: { points: [number, number][];
       const L = await import("leaflet");
       if (cancelled || !ref.current) return;
       map = L.map(ref.current, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 18, attribution: "© OpenStreetMap",
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 18, attribution: "© OpenStreetMap, © CARTO", subdomains: "abcd",
       }).addTo(map);
       const line = L.polyline(points, { color, weight: 4, opacity: 0.95 }).addTo(map);
       map.fitBounds(line.getBounds(), { padding: [16, 16] });
