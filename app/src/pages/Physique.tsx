@@ -392,7 +392,7 @@ export default function Physique() {
       </details>
 
       <div style={{ marginBottom: 14 }}>
-        <Segmented label="Sección" value={tab} onChange={setTab} options={[
+        <Segmented label="Sección" variant="tabs" value={tab} onChange={setTab} options={[
           { value: "cronologia", label: "Cronología" }, { value: "comparar", label: "Comparar" }, { value: "tendencias", label: "Tendencias" }, { value: "composicion", label: "Composición" }]} />
       </div>
 
@@ -427,11 +427,11 @@ export default function Physique() {
             Sube fotos frontal, de perfil y de espalda para seguir tu evolución.</Empty>}
         </section>
       )}
-      {tab === "comparar" && <Card title="Comparar dos fechas"><Compare entries={entries} /></Card>}
-      {tab === "tendencias" && <Card title="Peso, cintura y entrenamiento"><Trends entries={entries} /></Card>}
-      {tab === "composicion" && <Card title="Composición corporal (báscula)"><Composition onImport={() => setImporting(true)} /></Card>}
+      {tab === "comparar" && <Card title="Comparar dos fechas" icon="camera" tone="violet"><Compare entries={entries} /></Card>}
+      {tab === "tendencias" && <Card title="Peso, cintura y entrenamiento" icon="chart" tone="info"><Trends entries={entries} /></Card>}
+      {tab === "composicion" && <Card title="Composición corporal (báscula)" icon="scale" tone="ok"><Composition onImport={() => setImporting(true)} /></Card>}
 
-      <Card title="Comentar cambios visibles" className="" action={<span className="badge">No disponible</span>}>
+      <Card title="Comentar cambios visibles" icon="shield" tone="ok" className="" action={<span className="badge">No disponible</span>}>
         <p className="small ink2" style={{ marginTop: 4 }}>Función futura opcional: requiere configurar un proveedor de visión en el servidor. Está desactivada; ninguna foto se envía a servicios externos, y cuando exista solo se usará si la lanzas tú expresamente sobre las fotos que elijas.</p>
       </Card>
 

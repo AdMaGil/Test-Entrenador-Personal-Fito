@@ -101,19 +101,19 @@ export default function Health() {
 
       <h2 style={{ margin: "4px 0 10px" }}>Peso y composición</h2>
       <div className="grid stats" style={{ marginBottom: 14 }}>
-        <Stat label="Última medición" value={last ? fmtWeight(last.weight_kg, units) : null}
+        <Stat label="Última medición" icon="scale" tone="info" value={last ? fmtWeight(last.weight_kg, units) : null}
           badge={last ? <OriginBadge origin={last.data_origin === "manual" ? "manual" : "medido"} /> : undefined}
           foot={last ? `${fmtDayLong(last.measured_on)} · ${last.source === "intervals" ? "Feel Fit vía Intervals.icu" : "Registro manual"}` : "No hay mediciones reales"} />
-        <Stat label="Tendencia" value={trend ? `${trend.deltaKg >= 0 ? "+" : "−"}${fmtNum(Math.abs(trend.deltaKg), 1)} kg` : null}
+        <Stat label="Tendencia" icon="chart" tone="violet" value={trend ? `${trend.deltaKg >= 0 ? "+" : "−"}${fmtNum(Math.abs(trend.deltaKg), 1)} kg` : null}
           foot={trend ? `Del ${fmtDay(trend.fromDate)} al ${fmtDay(trend.toDate)}` : `Se necesitan al menos 2 mediciones reales separadas 7–30 días (hay ${weights.length})`} />
-        <Stat label="Objetivo" value={goal ? fmtWeight(goal, units) : null}
+        <Stat label="Objetivo" icon="target" tone="ok" value={goal ? fmtWeight(goal, units) : null}
           foot={goal && last?.weight_kg ? `Diferencia: ${fmtNum(last.weight_kg - goal, 1)} kg` : "Opcional · configúralo en Ajustes"} />
-        <Stat label="% grasa corporal" value={lastFat ? `${fmtNum(lastFat.body_fat_pct, 1)} %` : null}
+        <Stat label="% grasa corporal" icon="droplet" tone="warn" value={lastFat ? `${fmtNum(lastFat.body_fat_pct, 1)} %` : null}
           badge={lastFat ? <OriginBadge origin="estimado" title="Estimación por bioimpedancia de la báscula" /> : undefined}
           foot={lastFat ? `Estimación por bioimpedancia · ${fmtDay(lastFat.measured_on)}` : "No disponible"} />
       </div>
       <div className="split" style={{ marginBottom: 22 }}>
-        <Card title="Historial de peso">
+        <Card title="Historial de peso" icon="scale" tone="info">
           {weightSeries.length >= 1 ? (
             <LineChartBox data={weightSeries} xKey="x" ariaLabel="Peso medido" xFormat={(v) => fmtDay(String(v))} yFormat={(v) => `${fmtNum(v, 1)}`}
               refLine={goal ? { y: goal, label: "Objetivo" } : undefined}
@@ -121,7 +121,7 @@ export default function Health() {
           ) : <p className="small muted">No hay mediciones de peso en este periodo.</p>}
           <p className="chart-note">Solo se representan días con una medición real; no se arrastra el último peso a días sin pesaje. La media de 7 días aparece cuando hay al menos 3 mediciones en la ventana.</p>
         </Card>
-        <Card title="Mediciones">
+        <Card title="Mediciones" icon="list" tone="info">
           {[...data.measurements].sort((a, b) => b.measured_on.localeCompare(a.measured_on)).slice(0, 12).map((m) => (
             <div key={m.id} className="row between" style={{ padding: "6px 0", borderBottom: "1px solid var(--line)" }}>
               <span className="small">{fmtDay(m.measured_on)}</span>
@@ -139,16 +139,16 @@ export default function Health() {
 
       <h2 style={{ margin: "4px 0 10px" }}>Sueño</h2>
       <div className="grid stats" style={{ marginBottom: 14 }}>
-        <Stat label="Última noche disponible" value={lastSleep ? fmtDuration(lastSleep.sleep_secs, { short: true }) : null}
+        <Stat label="Última noche disponible" icon="moon" tone="violet" value={lastSleep ? fmtDuration(lastSleep.sleep_secs, { short: true }) : null}
           foot={lastSleep ? `Registrada el ${fmtDay(lastSleep.date)}` : "Sin datos de sueño"} />
-        <Stat label="Media 7 días" value={s7.meanSecs ? fmtDuration(s7.meanSecs, { short: true }) : null} foot={`${s7.nights} noches con datos`} />
-        <Stat label="Media 30 días" value={s30.meanSecs ? fmtDuration(s30.meanSecs, { short: true }) : null} foot={`${s30.nights} noches con datos`} />
-        <Stat label="Regularidad (30 días)" value={s30.sdSecs ? `± ${fmtDuration(s30.sdSecs, { short: true })}` : null}
+        <Stat label="Media 7 días" icon="moon" tone="violet" value={s7.meanSecs ? fmtDuration(s7.meanSecs, { short: true }) : null} foot={`${s7.nights} noches con datos`} />
+        <Stat label="Media 30 días" icon="moon" tone="violet" value={s30.meanSecs ? fmtDuration(s30.meanSecs, { short: true }) : null} foot={`${s30.nights} noches con datos`} />
+        <Stat label="Regularidad (30 días)" icon="clock" tone="info" value={s30.sdSecs ? `± ${fmtDuration(s30.sdSecs, { short: true })}` : null}
           foot="Variación de la duración entre noches" />
-        {anyScore && <Stat label="Puntuación Garmin" value={lastSleep && isNum(lastSleep.sleep_score) ? fmtNum(lastSleep.sleep_score) : null}
+        {anyScore && <Stat label="Puntuación Garmin" icon="chart" tone="ok" value={lastSleep && isNum(lastSleep.sleep_score) ? fmtNum(lastSleep.sleep_score) : null}
           foot={s30.meanScore ? `Media 30 días: ${fmtNum(s30.meanScore)}` : undefined} />}
       </div>
-      <Card title="Horas de sueño por noche" className="">
+      <Card title="Horas de sueño por noche" icon="moon" tone="violet" className="">
         {sleepSeries.some((s) => s.horas !== null)
           ? <StackedBars data={sleepSeries} xKey="x" ariaLabel="Horas de sueño" xFormat={(v) => fmtDay(String(v))} yFormat={(v) => `${fmtNum(v, 1)} h`}
             series={[{ key: "horas", label: "Horas", color: t.info }]} />
@@ -158,14 +158,14 @@ export default function Health() {
 
       <h2 style={{ margin: "22px 0 10px" }}>Recuperación</h2>
       <div className="grid stats" style={{ marginBottom: 14 }}>
-        <Stat label="HRV nocturna" value={lastHrv && isNum(lastHrv.hrv) ? fmtNum(lastHrv.hrv) : null} unit="ms"
+        <Stat label="HRV nocturna" icon="bolt" tone="violet" value={lastHrv && isNum(lastHrv.hrv) ? fmtNum(lastHrv.hrv) : null} unit="ms"
           foot={hrv ? `Tu rango (30 días): ${fmtNum(hrv.mean - hrv.sd)}–${fmtNum(hrv.mean + hrv.sd)} ms · ${hrv.position}` : "Se necesitan al menos 7 registros previos para compararla con tu histórico"} />
-        <Stat label="FC en reposo" value={lastRhr && isNum(lastRhr.resting_hr) ? fmtNum(lastRhr.resting_hr) : null} unit="ppm"
+        <Stat label="FC en reposo" icon="heart" tone="crit" value={lastRhr && isNum(lastRhr.resting_hr) ? fmtNum(lastRhr.resting_hr) : null} unit="ppm"
           foot={rhr ? `Tu rango (30 días): ${fmtNum(rhr.mean - rhr.sd)}–${fmtNum(rhr.mean + rhr.sd)} ppm · ${rhr.position}` : "Histórico insuficiente para comparar"} />
-        <Stat label="Carga últimos 7 días" value={load7 !== null ? fmtNum(load7) : null} foot={`Media semanal de las últimas 4 semanas: ${fmtNum(avgWeek28)}`} />
+        <Stat label="Carga últimos 7 días" icon="chart" tone="warn" value={load7 !== null ? fmtNum(load7) : null} foot={`Media semanal de las últimas 4 semanas: ${fmtNum(avgWeek28)}`} />
       </div>
       <div className="split">
-        <Card title="HRV y frecuencia cardiaca en reposo">
+        <Card title="HRV y frecuencia cardiaca en reposo" icon="heart" tone="crit">
           {hrvVals.length >= 2 ? (
             <>
               <LineChartBox data={recSeries} xKey="x" ariaLabel="HRV" height={180} xFormat={(v) => fmtDay(String(v))}
@@ -179,7 +179,7 @@ export default function Health() {
           ) : <p className="small muted">Datos insuficientes de HRV en este periodo.</p>}
           <p className="chart-note">La banda sombreada es tu propio rango (media ± 1 desviación típica del periodo). No se aplican umbrales universales ni se calcula una puntuación de recuperación: son datos para interpretar junto a cómo te encuentras.</p>
         </Card>
-        <Card title="Sensaciones registradas">
+        <Card title="Sensaciones registradas" icon="info" tone="ok">
           {checkins.length ? (
             <table className="data">
               <thead><tr><th>Día</th><th className="n">Energía</th><th className="n">Fatiga</th><th>Molestias</th></tr></thead>
@@ -194,13 +194,13 @@ export default function Health() {
 
       <h2 style={{ margin: "22px 0 10px" }}>Calorías</h2>
       <div className="split">
-        <Card title="Calorías de actividades por semana" action={<OriginBadge origin="estimado" />}>
+        <Card title="Calorías de actividades por semana" icon="bolt" tone="warn" action={<OriginBadge origin="estimado" />}>
           {kcalWeeks.some((k) => k.kcal > 0)
             ? <StackedBars data={kcalWeeks} xKey="x" ariaLabel="Calorías de actividades" xFormat={(v) => fmtDay(String(v))} yFormat={(v) => `${fmtNum(v)} kcal`}
               series={[{ key: "kcal", label: "kcal de actividades", color: t.warn }]} />
             : <p className="small muted">Sin calorías registradas en actividades.</p>}
         </Card>
-        <Card title="Gasto y balance">
+        <Card title="Gasto y balance" icon="info" tone="info">
           <div className="stack small ink2" style={{ gap: 8 }}>
             <p><b>Calorías de actividades:</b> estimación del dispositivo para cada sesión, sin sumar el gasto basal.</p>
             <p><b>Gasto total diario:</b> Sin datos. No está disponible en tu cuenta a través de la API; no se suma a las actividades para evitar duplicidades.</p>

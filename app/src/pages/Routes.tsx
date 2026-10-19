@@ -79,7 +79,7 @@ export default function Routes() {
         <Stat label="Velocidad media" value={stats.avgSpeedMs !== null ? fmtSpeed(stats.avgSpeedMs, units) : null} foot="Ponderada por distancia" />
       </div>
 
-      <Card title="Mapa de rutas" action={mapLoading ? <span className="small muted">Cargando trazados…</span> : undefined}>
+      <Card title="Mapa de rutas" icon="route" tone="info" action={mapLoading ? <span className="small muted">Cargando trazados…</span> : undefined}>
         {withGps.length > 0 ? (
           <>
             <Suspense fallback={<p className="small muted">Cargando mapa…</p>}>
@@ -96,14 +96,14 @@ export default function Routes() {
       </Card>
 
       {monthly.length > 1 && (
-        <Card title="Distancia por mes" action={<Link to="/evolucion" className="btn ghost sm">Entrenamiento<Icon name="chevron" /></Link>}>
+        <Card title="Distancia por mes" icon="chart" tone="violet" action={<Link to="/evolucion" className="btn ghost sm">Entrenamiento<Icon name="chevron" /></Link>}>
           <StackedBars data={monthly} xKey="month" ariaLabel="Kilómetros de MTB y e-MTB por mes"
             xFormat={(v) => String(v).slice(5)} yFormat={(v) => `${v} km`}
             series={[{ key: "emtb", label: "e-MTB", color: t.info }, { key: "mtb", label: "MTB", color: t.ok }]} />
         </Card>
       )}
 
-      <Card title="Salidas">
+      <Card title="Salidas" icon="list" tone="info">
         {routes.length ? (
           <div className="route-table">
             <div className="route-row route-head small muted">

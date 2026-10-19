@@ -38,7 +38,7 @@ function CheckinCard() {
     return { ...x, soreness: without.includes(s) ? without.filter((y) => y !== s) : [...without, s] };
   });
   return (
-    <Card title="¿Cómo te encuentras hoy?" action={existing ? <span className="badge manual">Registrado</span> : <span className="small muted">Pendiente</span>}>
+    <Card title="¿Cómo te encuentras hoy?" icon="info" tone="ok" action={existing ? <span className="badge manual">Registrado</span> : <span className="small muted">Pendiente</span>}>
       <div className="stack" style={{ gap: 12 }}>
         <Field label="Energía"><Scale name="Energía" value={c.energy} onChange={(v) => setC({ ...c, energy: v })} labels={["Muy baja", "Baja", "Normal", "Alta", "Muy alta"]} /></Field>
         <Field label="Fatiga"><Scale name="Fatiga" value={c.fatigue} onChange={(v) => setC({ ...c, fatigue: v })} labels={["Ninguna", "Leve", "Moderada", "Alta", "Máxima"]} /></Field>
@@ -256,15 +256,15 @@ export default function Today() {
           <WeightGoalCard />
 
           <div className="grid stats">
-            <Stat label="Tiempo esta semana" value={week.sessions ? fmtDuration(week.timeS, { short: true }) : null}
+            <Stat label="Tiempo esta semana" icon="clock" tone="info" value={week.sessions ? fmtDuration(week.timeS, { short: true }) : null}
               foot={week.sessions ? `${week.sessions} sesiones` : "Sin actividades esta semana"} />
-            <Stat label="Realizadas / planificadas" value={plannedWeek.length ? `${week.sessions} / ${plannedWeek.length}` : week.sessions ? `${week.sessions}` : null}
+            <Stat label="Realizadas / planificadas" icon="check" tone="ok" value={plannedWeek.length ? `${week.sessions} / ${plannedWeek.length}` : week.sessions ? `${week.sessions}` : null}
               foot={plannedWeek.length ? `${week.plannedDone} del plan marcadas como completadas` : "Sin sesiones planificadas"} />
-            <Stat label="Carga semanal" value={week.load !== null ? fmtNum(week.load) : null}
+            <Stat label="Carga semanal" icon="bolt" tone="violet" value={week.load !== null ? fmtNum(week.load) : null}
               foot={avgLoad !== null ? `Media últimas 4 semanas: ${fmtNum(avgLoad)}` : "Sin histórico para comparar"} />
           </div>
 
-          <Card title="Esta semana" action={<Link to="/calendario" className="btn ghost sm">Calendario<Icon name="chevron" /></Link>}>
+          <Card title="Esta semana" icon="calendar" tone="violet" action={<Link to="/calendario" className="btn ghost sm">Calendario<Icon name="chevron" /></Link>}>
             <div className="weekstrip">
               {weekDays(today).map((d) => {
                 const dayActs = acts.filter((a) => a.local_date === d);
@@ -299,13 +299,13 @@ export default function Today() {
         <div className="stack">
           <RecoveryCard />
           <CheckinCard />
-          <Card title="Observaciones">
+          <Card title="Observaciones" icon="info" tone="info">
             {notes.length ? (
               <ul className="reasons">{notes.map((n) => <li key={n}>{n}</li>)}</ul>
             ) : <p className="small muted">Nada destacable con los datos disponibles.</p>}
             <p className="tiny muted" style={{ marginTop: 8 }}>Son descripciones de tus datos, no conclusiones sobre sus causas.</p>
           </Card>
-          <Card title="Actividades recientes" action={<Link to="/actividades" className="btn ghost sm">Todas<Icon name="chevron" /></Link>}>
+          <Card title="Actividades recientes" icon="list" tone="violet" action={<Link to="/actividades" className="btn ghost sm">Todas<Icon name="chevron" /></Link>}>
             {recent.length ? <div className="list" style={{ margin: "0 -16px -16px" }}>{recent.map((a) => { const w = activityWodInfo(data, a.id); const p = activityPending(data, a.id); return <ActivityRow key={a.id} a={a} wodTitle={w.title} tags={w.tags} pending={hasPending(p) ? describePending(p) : null} />; })}</div>
               : <Empty title="Sin actividades">Cuando se sincronicen o importes actividades aparecerán aquí.</Empty>}
           </Card>

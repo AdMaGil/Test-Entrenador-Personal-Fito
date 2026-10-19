@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Icon } from "../components/icons";
+import { Icon, type IconName } from "../components/icons";
 import { PageHead } from "../components/Layout";
 import { PlannedForm, SessionDetails } from "../components/Sessions";
-import { Card, Empty } from "../components/ui";
+import { Card, Empty, IconChip, type Tone } from "../components/ui";
 import { useApp } from "../data/AppData";
 import { coachAiEnabled, supabase } from "../data/supabaseClient";
 import { explainProgress, explainWeight, reorganizeWeek, suggestToday, type CoachContext } from "../lib/coach";
@@ -12,13 +12,13 @@ import { SPORT_LABEL } from "../lib/sports";
 import type { CoachPayload, PlannedDraft, PlannedSession } from "../lib/types";
 
 const ACTIONS = [
-  { key: "30", label: "Hoy tengo 30 minutos" },
-  { key: "casa", label: "Adapta la sesión a casa" },
-  { key: "sueno", label: "Esta noche he dormido poco" },
-  { key: "emtb", label: "Quiero salir con la e-MTB" },
-  { key: "semana", label: "Reorganiza mi semana" },
-  { key: "evolucion", label: "Explícame cómo voy evolucionando" },
-] as const;
+  { key: "30", label: "Hoy tengo 30 minutos", icon: "clock", tone: "info" },
+  { key: "casa", label: "Adapta la sesión a casa", icon: "home", tone: "info" },
+  { key: "sueno", label: "Esta noche he dormido poco", icon: "moon", tone: "warn" },
+  { key: "emtb", label: "Quiero salir con la e-MTB", icon: "bike", tone: "info" },
+  { key: "semana", label: "Reorganiza mi semana", icon: "calendar", tone: "warn" },
+  { key: "evolucion", label: "Explícame cómo voy evolucionando", icon: "chart", tone: "info" },
+] as const satisfies readonly { key: string; label: string; icon: IconName; tone: Tone }[];
 
 function ProposalCard({ p }: { p: PlannedDraft }) {
   const { run } = useApp();
@@ -126,14 +126,19 @@ export default function Coach() {
       <PageHead title="Mi entrenador" sub={coachAiEnabled ? "Propuestas por reglas e IA configurada en el servidor" : "Propuestas basadas en reglas explícitas · IA no configurada"} />
       <div className="split">
         <div className="stack">
-          <Card title="Acciones rápidas">
-            <div className="row">
-              {ACTIONS.map((a) => <button key={a.key} className="btn sm" onClick={() => doAction(a.key)}>{a.label}</button>)}
+          <Card title="Acciones rápidas" icon="bolt" tone="accent">
+            <div className="action-tiles">
+              {ACTIONS.map((a) => (
+                <button key={a.key} className="action-tile" onClick={() => doAction(a.key)}>
+                  <IconChip icon={a.icon} tone={a.tone} />
+                  <span>{a.label}</span>
+                </button>
+              ))}
             </div>
             <p className="tiny muted" style={{ marginTop: 8 }}>Las propuestas nunca se añaden solas al calendario: revísalas y decide.</p>
           </Card>
 
-          <Card title="Conversación" action={data.coachMessages.length ? <button className="btn ghost sm" onClick={() => confirm("¿Borrar la conversación?") && run((r) => r.clearCoachMessages())}>Borrar</button> : null}>
+          <Card title="Conversación" icon="coach" tone="violet" action={data.coachMessages.length ? <button className="btn ghost sm" onClick={() => confirm("¿Borrar la conversación?") && run((r) => r.clearCoachMessages())}>Borrar</button> : null}>
             <div className="chat" aria-live="polite">
               {data.coachMessages.length ? data.coachMessages.map((m) => (
                 <div key={m.id} className={`msg ${m.role}`}>
@@ -153,7 +158,7 @@ export default function Coach() {
         </div>
 
         <div className="stack">
-          <Card title="Tu configuración" action={<Link to="/ajustes" className="btn ghost sm">Editar<Icon name="chevron" /></Link>}>
+          <Card title="Tu configuración" icon="settings" tone="info" action={<Link to="/ajustes" className="btn ghost sm">Editar<Icon name="chevron" /></Link>}>
             <dl className="small" style={{ margin: 0, display: "grid", gridTemplateColumns: "120px 1fr", gap: "6px 10px" }}>
               <dt className="muted">Objetivos</dt><dd style={{ margin: 0 }}>{p?.goals || "Sin configurar"}</dd>
               <dt className="muted">Días disponibles</dt><dd style={{ margin: 0 }}>{p?.available_days?.length ? p.available_days.map((d) => DOW_LABELS[d - 1]).join(", ") : "Sin configurar"}</dd>
@@ -163,7 +168,7 @@ export default function Coach() {
               <dt className="muted">Limitaciones</dt><dd style={{ margin: 0 }}>{p?.limitations || "Ninguna indicada"}</dd>
             </dl>
           </Card>
-          <Card title="Plan de estas dos semanas">
+          <Card title="Plan de estas dos semanas" icon="calendar" tone="violet">
             {weekPlan.length ? weekPlan.map((s) => (
               <div key={s.id} className="row between" style={{ padding: "7px 0", borderBottom: "1px solid var(--line)" }}>
                 <span className="small"><b>{fmtDay(s.date)}</b> · {s.title} <span className="muted">({s.status === "propuesta" ? "sugerencia" : s.status})</span></span>
@@ -175,7 +180,7 @@ export default function Coach() {
               <Link className="btn sm" to="/calendario">Ir al calendario</Link>
             </div>
           </Card>
-          <Card title="Cómo funcionan las sugerencias">
+          <Card title="Cómo funcionan las sugerencias" icon="info" tone="info">
             <ul className="reasons small">
               <li>Fatiga alta o energía baja registradas hoy → sesión suave (descanso activo si la fatiga es máxima).</li>
               <li>Dos o más días seguidos de intensidad alta (≥20 % del tiempo en Z4+) → sesión suave.</li>

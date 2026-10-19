@@ -107,7 +107,7 @@ export function GoalsRow({ onEdit }: { onEdit: () => void }) {
   const noGoals = !isNum(p?.weight_goal_kg) && !isNum(kGoal) && !isNum(p?.sleep_goal_h) && !isNum(p?.sessions_week_goal);
 
   return (
-    <Card title="Estado y objetivos" action={<button className="btn ghost sm" onClick={onEdit}><Icon name="edit" />Mis objetivos</button>}>
+    <Card title="Estado y objetivos" icon="target" tone="ok" action={<button className="btn ghost sm" onClick={onEdit}><Icon name="edit" />Mis objetivos</button>}>
       {noGoals && (
         <p className="small muted" style={{ marginBottom: 10 }}>
           Aún no has fijado objetivos. <button className="linkish" onClick={onEdit}>Fíjalos aquí</button> para ver tu progreso.
@@ -195,7 +195,7 @@ export function WeightGoalCard() {
   const hasData = pts.some((p) => p.peso !== null);
   const hasPlan = pts.some((p) => p.plan !== null);
   return (
-    <Card title="Evolución del peso" action={<Link to="/salud" className="btn ghost sm">Salud<Icon name="chevron" /></Link>}>
+    <Card title="Evolución del peso" icon="chart" tone="info" action={<Link to="/salud" className="btn ghost sm">Salud<Icon name="chevron" /></Link>}>
       {hasData ? (
         <LineChartBox data={pts} xKey="x" height={200} ariaLabel="Peso semanal y trayectoria hasta el objetivo"
           xFormat={(v) => fmtDay(String(v))} yFormat={(v) => `${fmtNum(v, 1)} kg`}
@@ -224,7 +224,7 @@ export function RecoveryCard() {
   const pos = (p: string | undefined) => (p === "dentro" ? "en tu rango" : p ? `${p} de tu rango` : "sin rango de referencia");
   const tone = (p: string | undefined, invert = false) => (p === "dentro" || !p ? "" : (p === "por debajo") !== invert ? "warn" : "ok");
   return (
-    <Card title="Recuperación" action={<Link to="/salud" className="btn ghost sm">Detalle<Icon name="chevron" /></Link>}>
+    <Card title="Recuperación" icon="heart" tone="crit" action={<Link to="/salud" className="btn ghost sm">Detalle<Icon name="chevron" /></Link>}>
       <div className="recovery">
         <div className={`rec ${tone(hrv?.position)}`}>
           <span className="goal-label">HRV</span>

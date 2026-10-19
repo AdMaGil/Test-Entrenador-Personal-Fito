@@ -5,7 +5,7 @@ import { buildSession } from "../lib/coach";
 import { addDays, fmtDayLong } from "../lib/dates";
 import { fmtDistance, fmtDuration, fmtElevation, fmtHr, fmtNum } from "../lib/format";
 import { durationOf, intensityBucket } from "../lib/metrics";
-import { isBike, SPORT_LABEL, sportColor } from "../lib/sports";
+import { isBike, SPORT_ICON, SPORT_LABEL, sportColor } from "../lib/sports";
 import type { Activity, Intensity, PlanCategory, PlannedDraft, PlannedSession } from "../lib/types";
 import { Icon } from "./icons";
 import { Field, Modal, SportChip } from "./ui";
@@ -184,9 +184,12 @@ export function ActivityMetrics({ a }: { a: Activity }) {
 export function ActivityRow({ a, wodTitle, tags, pending }: { a: Activity; wodTitle?: string | null; tags?: string[]; pending?: string | null }) {
   const { theme } = useApp();
   const ib = intensityBucket(a);
+  const c = sportColor(a.category, theme);
   return (
     <Link to={`/actividades/${a.id}`} className="list-item">
-      <span className="sw" style={{ background: sportColor(a.category, theme) }} aria-hidden="true" />
+      <span className="row-icon" style={{ background: `color-mix(in srgb, ${c} 20%, transparent)`, color: c }} aria-hidden="true">
+        <Icon name={SPORT_ICON[a.category]} />
+      </span>
       <span style={{ minWidth: 0 }}>
         <span className="t" style={{ display: "block" }}>{wodTitle || a.name || SPORT_LABEL[a.category]}</span>
         <span className="m">

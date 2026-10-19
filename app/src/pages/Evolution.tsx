@@ -98,14 +98,14 @@ export default function Evolution() {
 
       <div className="split">
         <div className="stack">
-          <Card title={byWeek ? "Carga por semana y deporte" : "Carga por día y deporte"}>
+          <Card title={byWeek ? "Carga por semana y deporte" : "Carga por día y deporte"} icon="chart" tone="violet">
             {sportsPresent.length ? (
               <StackedBars data={loadData} xKey="x" ariaLabel="Carga por deporte" xFormat={(v) => fmtDay(String(v))}
                 series={sportsPresent.map((s) => ({ key: s, label: SPORT_SHORT[s], color: sportColor(s, theme) }))} />
             ) : <p className="small muted">Sin carga registrada en este periodo.</p>}
           </Card>
 
-          <Card title="Aptitud, fatiga y forma" action={<OriginBadge origin="estimado" title="Calculado por Intervals.icu a partir de tu carga registrada" />}>
+          <Card title="Aptitud, fatiga y forma" icon="bolt" tone="warn" action={<OriginBadge origin="estimado" title="Calculado por Intervals.icu a partir de tu carga registrada" />}>
             {hasFit ? (
               <>
                 <LineChartBox data={fit} xKey="date" ariaLabel="Aptitud y fatiga" xFormat={(v) => fmtDay(String(v))}
@@ -123,7 +123,7 @@ export default function Evolution() {
             ) : <p className="small muted">Sin datos de aptitud y fatiga en este periodo.</p>}
           </Card>
 
-          <Card title="Evolución de sesiones comparables">
+          <Card title="Evolución de sesiones comparables" icon="chart" tone="info">
             <div className="row" style={{ marginBottom: 10 }}>
               <select className="input" style={{ width: "auto" }} value={sport} onChange={(e) => setSport(e.target.value as Sport)} aria-label="Deporte">
                 {SPORTS.filter((s) => s !== "otro").map((s) => <option key={s} value={s}>{SPORT_LABEL[s]}</option>)}
@@ -144,7 +144,7 @@ export default function Evolution() {
         </div>
 
         <div className="stack">
-          <Card title="Por deporte">
+          <Card title="Por deporte" icon="route" tone="info">
             <div className="table-wrap">
               <table className="data">
                 <thead><tr><th>Deporte</th><th className="n">Sesiones</th><th className="n">/semana</th><th className="n">Tiempo</th><th className="n">Antes</th></tr></thead>
@@ -163,14 +163,14 @@ export default function Evolution() {
             </div>
             <p className="chart-note">No se comparan deportes distintos por kilómetros o velocidad.</p>
           </Card>
-          <Card title="Distribución de intensidad">
+          <Card title="Distribución de intensidad" icon="bolt" tone="violet">
             <IntensityMix zones={curr.zones} />
           </Card>
-          <Card title="Tiempo en zonas (todo el periodo)">
+          <Card title="Tiempo en zonas (todo el periodo)" icon="clock" tone="info">
             <ZoneBars times={curr.zones} />
           </Card>
           {periodActs.some((a) => isBike(a.category)) && (
-            <Card title="Ciclismo">
+            <Card title="Ciclismo" icon="bike" tone="info">
               <p className="small ink2">Desnivel acumulado (MTB + e-MTB): <b className="num">{fmtNum(periodActs.filter((a) => isBike(a.category)).reduce((s, a) => s + (a.elevation_gain_m ?? 0), 0))} m</b></p>
               <p className="chart-note">MTB y e-MTB se analizan por separado; en e-MTB el desnivel lo comparte el motor.</p>
             </Card>
@@ -219,7 +219,7 @@ function StrengthEvolution() {
   const excluded = sessions.filter((s) => s.ambiguous).length;
 
   return (
-    <Card title="Fuerza: evolución por ejercicio">
+    <Card title="Fuerza: evolución por ejercicio" icon="dumbbell" tone="warn">
       {catalog.length ? (
         <div className="stack" style={{ gap: 12 }}>
           <div className="row">
