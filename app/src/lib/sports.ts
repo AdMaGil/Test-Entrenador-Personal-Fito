@@ -1,4 +1,16 @@
+import type { IconName } from "../components/icons";
 import type { PlanCategory, Sport } from "./types";
+
+// Icono por categoría, usado en filas de actividad y tarjetas de sesión
+// (look and feel del rediseño: icono en vez de solo una barra de color).
+export const SPORT_ICON: Record<PlanCategory, IconName> = {
+  hiit: "dumbbell",
+  emtb: "bike",
+  mtb: "bike",
+  run: "run",
+  otro: "route",
+  descanso: "bed",
+};
 
 // Paleta validada (dataviz/validate_palette.js) contra las superficies de
 // la app: sin FAIL; aviso CVD ≈7 → toda marca de deporte va SIEMPRE con

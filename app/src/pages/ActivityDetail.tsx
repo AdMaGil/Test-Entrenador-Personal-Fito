@@ -49,7 +49,7 @@ function emptyFeedback(activityId: string): Feedback {
 function FeedbackForm({ a, f, setF, hasExisting }: { a: Activity; f: Feedback; setF: (f: Feedback) => void; hasExisting: boolean }) {
   const num = (v: string) => (v === "" ? null : Number(v));
   return (
-    <Card title="Tu sesión: esfuerzo y notas" action={hasExisting ? <OriginBadge origin="manual" /> : null}>
+    <Card title="Tu sesión: esfuerzo y notas" icon="edit" tone="accent" action={hasExisting ? <OriginBadge origin="manual" /> : null}>
       <div className="form-grid">
         <Field label="RPE real de la sesión (1–10)" full>
           <div className="scale" style={{ gridTemplateColumns: "repeat(10, 1fr)" }} role="radiogroup" aria-label="RPE">
@@ -81,7 +81,7 @@ function Compare({ a }: { a: Activity }) {
   const rows = [a, ...sim];
   const bike = isBike(a.category);
   return (
-    <Card title={`Comparar con sesiones de ${SPORT_LABEL[a.category]}`}>
+    <Card title={`Comparar con sesiones de ${SPORT_LABEL[a.category]}`} icon="chart" tone="info">
       {sim.length ? (
         <>
           <div className="table-wrap">
@@ -478,7 +478,7 @@ export default function ActivityDetail() {
       </header>
 
       <div className="tabs-row">
-        <Segmented label="Secciones" value={tab} onChange={setTab}
+        <Segmented label="Secciones" variant="tabs" value={tab} onChange={setTab}
           options={[{ value: "registro", label: "WOD y resultado" }, { value: "reloj", label: "Datos del reloj" }]} />
       </div>
 
@@ -535,7 +535,7 @@ export default function ActivityDetail() {
               ))}
 
               {(otherGroups.size > 0 || (strengthy && !activeWods.length)) && (
-                <Card title={activeWods.length ? "Otros ejercicios" : "Ejercicios, series y cargas"}>
+                <Card title={activeWods.length ? "Otros ejercicios" : "Ejercicios, series y cargas"} icon="dumbbell" tone="warn">
                   <div className="stack" style={{ gap: 12 }}>
                     {[...otherGroups.entries()].map(([k, group]) => (
                       <ExerciseLog key={k || "_"} item={null} sets={group}
@@ -636,14 +636,14 @@ function WatchData({ a, streams, splits, color, bike, units, tz, mode, garmin, s
               foot={a.rider_power_source === "medidor" ? "Medidor de potencia" : a.rider_power_source === "estimado" ? "Solo hay una estimación del origen: no se muestra" : "Sin medidor de potencia"} />
           )}
         </div>
-        <Card title="Frecuencia cardiaca">
+        <Card title="Frecuencia cardiaca" icon="heart" tone="crit">
           {streams === undefined ? <p className="small muted">Cargando serie temporal…</p>
             : streams?.time && streams.heartrate ? <HrChart time={streams.time} hr={streams.heartrate} bounds={a.hr_zone_bounds} />
               : <p className="small muted">Sin serie temporal de frecuencia cardiaca.</p>}
         </Card>
-        <Card title="Tiempo en zonas"><ZoneBars times={a.hr_zone_times_s} bounds={a.hr_zone_bounds} /></Card>
+        <Card title="Tiempo en zonas" icon="clock" tone="info"><ZoneBars times={a.hr_zone_times_s} bounds={a.hr_zone_bounds} /></Card>
         {(bike || a.category === "run") && (
-          <Card title="Recorrido y elevación">
+          <Card title="Recorrido y elevación" icon="route" tone="info">
             {streams?.latlng && streams.latlng.length > 1 ? (
               <Suspense fallback={<p className="small muted">Cargando mapa…</p>}><MapView points={streams.latlng} color={color} /></Suspense>
             ) : <p className="small muted">Sin datos GPS para esta actividad.</p>}
@@ -653,7 +653,7 @@ function WatchData({ a, streams, splits, color, bike, units, tz, mode, garmin, s
           </Card>
         )}
         {a.category === "run" && splits.length > 0 && (
-          <Card title="Parciales por kilómetro">
+          <Card title="Parciales por kilómetro" icon="chart" tone="violet">
             <table className="data"><thead><tr><th>Km</th><th className="n">Tiempo del kilómetro (ritmo)</th></tr></thead>
               <tbody>{splits.map((s) => <tr key={s.km}><td>{s.km}</td><td className="n">{fmtClock(s.secs)} /km</td></tr>)}</tbody>
             </table>
@@ -662,7 +662,7 @@ function WatchData({ a, streams, splits, color, bike, units, tz, mode, garmin, s
         <Compare a={a} />
       </div>
       <div className="stack">
-        <Card title="Clasificación">
+        <Card title="Clasificación" icon="target" tone="ok">
           <div className="stack" style={{ gap: 10 }}>
             <p className="small ink2">Tipo original: <b>{sourceTypeLabel(a.source_type)}</b>{a.source_type ? <span className="muted"> ({a.source_type})</span> : null}</p>
             <p className="small ink2">Categoría automática: <b>{SPORT_LABEL[a.category_auto]}</b>{a.category_override && <> · Corregida a <b>{SPORT_LABEL[a.category_override]}</b></>}</p>

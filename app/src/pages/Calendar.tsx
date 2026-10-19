@@ -41,9 +41,10 @@ function ActivityCardSmall({ a }: { a: Activity }) {
     if (isNum(a.distance_m)) extra.push(fmtDistance(a.distance_m, units));
     if (isNum(a.elevation_gain_m)) extra.push(`+${fmtElevation(a.elevation_gain_m, units)}`);
   }
+  const c = sportColor(a.category, theme);
   return (
-    <button className="session-card done" onClick={() => nav(`/actividades/${a.id}`)}>
-      <span className="rail" style={{ background: sportColor(a.category, theme) }} />
+    <button className="session-card done" style={{ background: `color-mix(in srgb, ${c} 14%, var(--surface-2))` }} onClick={() => nav(`/actividades/${a.id}`)}>
+      <span className="rail" style={{ background: c }} />
       <span className="kind"><Icon name="check" width={12} height={12} />Realizada · {SPORT_SHORT[a.category]}</span>
       <span className="title">{a.name || SPORT_LABEL[a.category]}</span>
       <span className="m">{fmtDuration(durationOf(a), { short: true })}{extra.length ? ` · ${extra.join(" · ")}` : ""}</span>

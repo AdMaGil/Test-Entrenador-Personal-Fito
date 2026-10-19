@@ -5,14 +5,30 @@ import type { PlanCategory } from "../lib/types";
 import { Icon, type IconName } from "./icons";
 import { useApp } from "../data/AppData";
 
-export function Card({ title, action, children, className = "", pad = false }: {
-  title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; pad?: boolean;
+// Tonos del icono-chip (cuadrado redondeado con icono de color) que aparece
+// en cabeceras de tarjeta y estadísticas, replicando el patrón recurrente
+// de las mockups. Se apoya en variables de tema ya existentes + --violet.
+export type Tone = "accent" | "ok" | "warn" | "crit" | "info" | "violet";
+
+export function IconChip({ icon, tone = "info" }: { icon: IconName; tone?: Tone }) {
+  return (
+    <span className={`icon-chip tone-${tone}`} aria-hidden="true">
+      <Icon name={icon} />
+    </span>
+  );
+}
+
+export function Card({ title, icon, tone, action, children, className = "", pad = false }: {
+  title?: ReactNode; icon?: IconName; tone?: Tone; action?: ReactNode; children: ReactNode; className?: string; pad?: boolean;
 }) {
   return (
     <section className={`card ${pad ? "pad" : ""} ${className}`}>
       {(title || action) && (
         <div className="card-head">
-          {typeof title === "string" ? <h2>{title}</h2> : title}
+          <div className="card-head-title">
+            {icon && <IconChip icon={icon} tone={tone} />}
+            {typeof title === "string" ? <h2>{title}</h2> : title}
+          </div>
           {action}
         </div>
       )}
@@ -21,13 +37,20 @@ export function Card({ title, action, children, className = "", pad = false }: {
   );
 }
 
-export function Stat({ label, value, unit, foot, badge }: {
+export function Stat({ label, value, unit, foot, badge, icon, tone }: {
   label: ReactNode; value: string | number | null | undefined; unit?: string; foot?: ReactNode; badge?: ReactNode;
+  icon?: IconName; tone?: Tone;
 }) {
   const missing = value === null || value === undefined || value === MISSING || value === "";
   return (
     <div className="card stat">
-      <div className="stat-label"><span>{label}</span>{badge}</div>
+      <div className="stat-label">
+        <span className="stat-label-text">
+          {icon && <IconChip icon={icon} tone={tone} />}
+          <span>{label}</span>
+        </span>
+        {badge}
+      </div>
       {missing ? (
         <div className="stat-value missing">{MISSING}</div>
       ) : (
@@ -76,11 +99,13 @@ export function Empty({ title, children, action }: { title: string; children?: R
   );
 }
 
-export function Segmented<T extends string>({ value, options, onChange, label }: {
+export function Segmented<T extends string>({ value, options, onChange, label, variant = "pills" }: {
   value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string;
+  /** "pills" (por defecto): grupo compacto con relleno al elegir. "tabs": fila de pestañas subrayadas. */
+  variant?: "pills" | "tabs";
 }) {
   return (
-    <div className="segmented" role="group" aria-label={label}>
+    <div className={`segmented ${variant === "tabs" ? "tabs" : ""}`} role="group" aria-label={label}>
       {options.map((o) => (
         <button key={o.value} type="button" aria-pressed={o.value === value} onClick={() => onChange(o.value)}>{o.label}</button>
       ))}
