@@ -430,6 +430,8 @@ details.disclosure[open] > summary .chev { transform: rotate(90deg); }
 .login { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; }
 .login .card { width: min(420px, 100%); }
 .leaflet-container { background: var(--surface-2); border-radius: 10px; }
+/* Mapa oscuro sin proveedor de pago: teselas OSM estándar (gratuitas, sin clave) invertidas por CSS en tema oscuro. */
+:root[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.7); }
 .leaflet-control-zoom a { background: var(--surface) !important; color: var(--ink) !important; border-color: var(--line-strong) !important; }
 .leaflet-control-zoom a:hover { background: var(--surface-3) !important; }
 .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 85%, transparent) !important; color: var(--ink-3) !important; }
