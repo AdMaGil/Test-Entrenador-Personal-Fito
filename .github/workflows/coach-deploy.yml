@@ -1,0 +1,48 @@
+name: Adolfo Training · desplegar asistente IA (manual)
+
+# Solo se ejecuta a mano. Despliega la función «coach» en Supabase y guarda la
+# clave de Claude como secreto del servidor (nunca llega al navegador).
+# Requiere los secretos de GitHub:
+#   SUPABASE_ACCESS_TOKEN  (Supabase → Account → Access Tokens)
+#   SUPABASE_URL           (ya existe; de ahí se obtiene el identificador del proyecto)
+#   ANTHROPIC_API_KEY      (console.anthropic.com → API Keys)
+# Opcional (variables): COACH_MODEL, COACH_DAILY_LIMIT.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Escribe "desplegar" para confirmar'
+        required: true
+
+jobs:
+  deploy:
+    if: ${{ github.event.inputs.confirmar == 'desplegar' }}
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      COACH_MODEL: ${{ vars.COACH_MODEL }}
+      COACH_DAILY_LIMIT: ${{ vars.COACH_DAILY_LIMIT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Comprobar secretos
+        run: |
+          for v in SUPABASE_ACCESS_TOKEN SUPABASE_URL ANTHROPIC_API_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::Falta el secreto $v"; exit 1; fi
+          done
+      - name: Guardar secretos en Supabase
+        run: |
+          REF=$(echo "$SUPABASE_URL" | sed -E 's#https?://([^.]+)\..*#\1#')
+          args="ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
+          [ -n "$COACH_MODEL" ] && args="$args COACH_MODEL=$COACH_MODEL"
+          [ -n "$COACH_DAILY_LIMIT" ] && args="$args COACH_DAILY_LIMIT=$COACH_DAILY_LIMIT"
+          supabase secrets set $args --project-ref "$REF"
+      - name: Desplegar función coach
+        run: |
+          REF=$(echo "$SUPABASE_URL" | sed -E 's#https?://([^.]+)\..*#\1#')
+          supabase functions deploy coach --project-ref "$REF"
+          echo "::notice::Función coach desplegada"
