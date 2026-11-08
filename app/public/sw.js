@@ -7,11 +7,19 @@ const CACHE = "adolfo-training-v1";
 self.addEventListener("install", () => self.skipWaiting());
 
 self.addEventListener("activate", (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
-  );
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    // Había cachés de otra versión (p. ej. el panel antiguo, que servía su
+    // index.html desde caché para siempre): se borran y se recargan las
+    // pestañas abiertas para que muestren la app actual sin tocar nada.
+    const hadOld = keys.some((k) => k !== CACHE);
+    await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    await self.clients.claim();
+    if (hadOld) {
+      const wins = await self.clients.matchAll({ type: "window" });
+      wins.forEach((w) => w.navigate(w.url).catch(() => {}));
+    }
+  })());
 });
 
 self.addEventListener("fetch", (e) => {
